@@ -1,0 +1,5 @@
+# Nunca subir datos ni scripts de base
+*.sql
+datos*.json
+noviembre_carga*.json
+*.zip
