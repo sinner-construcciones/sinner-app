@@ -68,7 +68,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 11:40";
+const VERSION="19/11 13:10";
 const VIEWS=["fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1111,7 +1111,7 @@ async function runImport(){
   if(!file)return;
   let pack;try{pack=JSON.parse(await file.text());if(!Array.isArray(pack.docs))throw 0}catch(e){return toast("Ese archivo no es datos.json")}
   const by={};for(const x of pack.docs){const[t,id]=x.p.split("/");(by[t]=by[t]||[]).push({id,data:x.d})}
-  S.importing={n:0,total:pack.docs.length};render();
+  S.importing={n:0,total};render();
   try{
     for(const [t,rows] of Object.entries(by)){
       for(let i=0;i<rows.length;i+=200){const {error}=await sb.from(t).upsert(rows.slice(i,i+200));if(error)throw error;S.importing.n+=Math.min(200,rows.length-i);render()}
@@ -1131,14 +1131,25 @@ async function runPack(){
   for(const x of pack.docs){const[t,id]=String(x.p||"").split("/");
     if(!(t in TABLAS)||t==="config"||!id||!/^[\w-]{1,80}$/.test(id)||!x.d||typeof x.d!=="object")return toast("El archivo tiene datos no válidos ("+String(x.p).slice(0,40)+")");
     (by[t]=by[t]||[]).push({id,data:x.d});cnt[t]=(cnt[t]||0)+1}
-  const res=Object.entries(cnt).map(([t,n])=>n+" "+t).join(", ");
-  if(!confirm(`Se van a cargar ${pack.docs.length} registros (${res}).\nSi alguno ya estaba, se actualiza: no se duplica nada.\n¿Seguimos?`))return;
-  S.importing={n:0,total:pack.docs.length};render();
+  /* no pisar lo que ya existe ni duplicar lo que se cargó a mano */
+  const yaMov=new Map();for(const m of S.movs){const k=[m.fecha,m.caja,m.tipo,Math.round(+m.monto||0)].join("|");yaMov.set(k,(yaMov.get(k)||0)+1)}
+  const local={movimientos:S.movs,jornales:S.jorn,bitacora:S.bit,obras:S.obras,empleados:S.emp,sueldos:S.liqs};
+  const salteados=[];let total=0;
+  for(const t of Object.keys(by)){by[t]=by[t].filter(r=>{
+    if(r.data.actualizar||!(+pack.version>=22))return true;
+    const L=local[t]||[];if(L.some(x=>x.id===r.id)){salteados.push(t+": ya estaba ("+r.id+")");return false}
+    if(t==="movimientos"&&r.data.revisarDuplicado){const k=[r.data.fecha,r.data.caja,r.data.tipo,Math.round(+r.data.monto||0)].join("|");if(yaMov.get(k)){yaMov.set(k,yaMov.get(k)-1);salteados.push(`${fdate(r.data.fecha)} ${r.data.caja} ${fmt(r.data.monto)}: ya estaba cargado a mano`);return false}}
+    if((t==="jornales"||t==="bitacora")&&L.some(x=>x.fecha===r.data.fecha&&x.obra===r.data.obra)){salteados.push(`${t} ${fdate(r.data.fecha)} ${obraNombre(r.data.obra)}: ya estaba cargado`);return false}
+    return true});total+=by[t].length;if(!by[t].length)delete by[t]}
+  if(!total)return alert("Todo lo de este archivo ya estaba cargado. No se agregó nada.\n\n"+salteados.slice(0,25).join("\n"));
+  const res=Object.entries(by).map(([t,L])=>L.length+" "+t).join(", ");
+  if(!confirm(`Se van a cargar ${total} registros nuevos (${res}).${salteados.length?`\n\nSe saltean ${salteados.length} porque ya estaban:\n`+salteados.slice(0,15).join("\n")+(salteados.length>15?"\n…":""):""}\n\n¿Seguimos?`))return;
+  S.importing={n:0,total};render();
   try{
     for(const [t,rows] of Object.entries(by)){
       for(let i=0;i<rows.length;i+=200){const {error}=await sb.from(t).upsert(rows.slice(i,i+200));if(error)throw error;S.importing.n+=Math.min(200,rows.length-i);render()}
     }
-    S.importing=null;await cargarTodo();toast("Listo: "+pack.docs.length+" registros cargados");render();
+    S.importing=null;await cargarTodo();toast("Listo: "+total+" registros cargados");render();
   }catch(e){S.importing=null;toast("Se cortó la carga. Probá de nuevo: no se duplica nada.");render()}
 }
 
