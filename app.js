@@ -68,6 +68,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
+const VERSION="19/11 11:05";
 const VIEWS=["portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1702,7 +1703,7 @@ function pintarMenu(){
     <button type="button" class="it" data-madm="cfg"><span class="ic" aria-hidden="true">⚙️</span>Ajustes: precios, jornal y saldos</button>
     <button type="button" class="it" data-madm="pack"><span class="ic" aria-hidden="true">📥</span>Importar datos (.json)</button>
     <button type="button" class="it" data-madm="backup"><span class="ic" aria-hidden="true">💾</span>Copia de seguridad</button>`}
-  <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button>`;
+  <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button><div class="grp" style="text-transform:none">Versión ${VERSION}</div>`;
   $("#menuClose").onclick=cerrarMenu;
   d.querySelectorAll("a").forEach(a=>a.onclick=()=>setTimeout(cerrarMenu,0));
   d.querySelectorAll("[data-madm]").forEach(b=>b.onclick=()=>{cerrarMenu();const k=b.dataset.madm;
