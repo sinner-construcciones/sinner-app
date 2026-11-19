@@ -68,7 +68,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 15:00";
+const VERSION="19/11 15:50";
 const VIEWS=["fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -147,6 +147,10 @@ function vCaja(){
   if(encM==="caja")L=L.filter(m=>m.caja===miC||m.cajaDestino===miC);
   else if(encM==="obras"){const ids=new Set(S.obras.map(o=>o.id));L=L.filter(m=>m.tipo==="egreso"&&ids.has(m.obra))}
   else if(f.caja!=="Todas")L=L.filter(m=>m.caja===f.caja||m.cajaDestino===f.caja);
+  const nrm=x=>String(x||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const qw=nrm(f.cq).split(/\s+/).filter(Boolean);
+  if(qw.length)L=L.filter(m=>{const txt=nrm([m.detalle,m.categoria,obraNombre(m.obra),m.caja,m.cajaDestino,m.rubroPersonal,m.proveedor,fdate(m.fecha),m.monto,fmt(m.monto),m.usd?"usd "+m.usd:""].join(" "));
+    return qw.every(w=>txt.includes(w)||txt.replace(/\./g,"").includes(w.replace(/[.$]/g,"")))});
   L=[...L].sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0));
   const sel=f.caja!=="Todas"?saldoCaja(f.caja):CAJAS.reduce((a,c)=>a+saldoCaja(c),0);
   let html="",last="";
@@ -164,12 +168,14 @@ function vCaja(){
   return `<div class="row between"><h2>${enc?"Mis gastos":"Caja"}</h2>${dl&&!enc?`<button class="btn sm" id="expMov">Descargar CSV</button>`:""}</div>
   ${enc?`<div class="seg" style="max-width:420px"><button type="button" data-encv="caja" aria-pressed="${encM==="caja"}">Mi caja (${esc(miC||"sin asignar")})</button><button type="button" data-encv="obras" aria-pressed="${encM==="obras"}">Gastos de mis obras</button></div>
   <p class="note" style="margin:0">${encM==="caja"?`Saldo de tu caja: <b>${fmt(saldoCaja(miC))}</b>. Ves todo lo que entra y sale de tu caja.`:"Todos los gastos de tus obras, de cualquier caja. Solo podés corregir lo que cargaste vos."}</p>`:""}
+  <label class="f">Buscar<input id="cajaQ" type="search" value="${esc(f.cq||"")}" placeholder="Ej: contenedor, Dick Haus, adelanto Yoni, 85000, Santa Rosa"></label>
+  ${qw.length?`<p class="note" style="margin:0">${L.length} resultado${L.length===1?"":"s"}${L.length?` · salidas ${fmt(L.filter(m=>m.tipo==="egreso").reduce((a,m)=>a+(+m.monto||0),0))} · entradas ${fmt(L.filter(m=>m.tipo==="ingreso").reduce((a,m)=>a+(+m.monto||0),0))}`:""}. Mirando ${f.mes==="todo"?"todos los meses":esc(mlabel(f.mes))}${f.caja!=="Todas"&&!enc?" de la caja "+esc(f.caja):""}.</p>`:""}
   <div class="chips" ${enc?'style="display:none"':""}>${["Todas",...CAJAS].map(c=>`<button class="chip" aria-pressed="${f.caja===c}" data-caja="${c}">${c}</button>`).join("")}</div>
   <div class="row between">
     <label class="f" style="flex:1;min-width:160px">Mes<select id="mesSel"><option value="todo" ${f.mes==="todo"?"selected":""}>Todos</option>${meses.map(m=>`<option value="${m}" ${f.mes===m?"selected":""}>${esc(mlabel(m))}</option>`).join("")}</select></label>
     <div class="stat card" style="padding:8px 12px;${enc?"display:none":""}"><div class="lbl">Saldo ${f.caja==="Todas"?"total":esc(f.caja)}</div><div class="num ${sel<0?"neg":""}">${fmt(sel)}</div></div>
   </div>
-  <div class="list">${html||`<div class="empty">No hay movimientos ${f.mes==="todo"?"":"en "+esc(mlabel(f.mes))}. Tocá “+ Movimiento” para cargar el primero.</div>`}</div>
+  <div class="list">${html||`<div class="empty">${qw.length?"Nada coincide con la búsqueda. Probá con otra palabra o elegí “Todos” en Mes.":`No hay movimientos ${f.mes==="todo"?"":"en "+esc(mlabel(f.mes))}.`} ${qw.length?"":"Tocá “+ Movimiento” para cargar el primero."}</div>`}</div>
   <div class="fab"><button class="btn pri" data-new="mov">${enc?"+ Gasto":"+ Movimiento"}</button></div>`;
 }
 
@@ -765,6 +771,7 @@ function bindView(v){
   if(v==="cierre")bindCierre(V);
   if(v==="presupuestos")bindPrecios(V);
   if(v==="fede")bindFede(V);
+  const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
   V.querySelectorAll("[data-edit-pres]").forEach(b=>b.onclick=()=>openPres(S.pres.find(x=>x.id===b.dataset.editPres)));
