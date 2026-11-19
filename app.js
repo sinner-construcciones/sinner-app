@@ -18,7 +18,7 @@ const SIN_OBRA = [
 const CATEGORIAS = ["Pago recibido","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
 const MOTIVOS = ["Lluvia / clima","Demora del hierro","Falta de material","Falta de personal","Espera de definiciones del cliente","Feriado","Problema de equipo","Otro"];
 const DEF_CFG = {cotizacion:0, costoJornal:100000, precioJornal:0, precios:{hormigon:180000, bombaFija:780000, bombaM3:21000, macrofibra:63000}, rend:{pared:10, revoque:12, platea:16}, cajasDesde:"2026-11-01", saldosIniciales:{Lucas:97469.07}, ultimoRecibo:2};
-const S = {movs:[], obras:[], jorn:[], bit:[], pres:[], inv:[], emp:[], liqs:[], cli:[], prov:[], imp:undefined, owner:false, importing:null, auth:"loading", rol:null, perfil:null, authMsg:"", cfg:structuredClone(DEF_CFG), cfgVer:false, loaded:{m:0,o:0,j:0,b:0}, uid:null, filt:{caja:"Todas", mes:hoy().slice(0,7)}, err:null, stale:false};
+const S = {movs:[], cierres:[], obras:[], jorn:[], bit:[], pres:[], inv:[], emp:[], liqs:[], cli:[], prov:[], imp:undefined, owner:false, importing:null, auth:"loading", rol:null, perfil:null, authMsg:"", cfg:structuredClone(DEF_CFG), cfgVer:false, loaded:{m:0,o:0,j:0,b:0}, uid:null, filt:{caja:"Todas", mes:hoy().slice(0,7)}, err:null, stale:false};
 let db=null, dict=null, dl=true, sb=null;
 
 /* ---------- utilidades ---------- */
@@ -66,8 +66,8 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VIEWS=["portada","inicio","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
-const VIEWS_ENC=["portada","inicio","caja","jornales","bitacora"];
+const VIEWS=["portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
+const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
 document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>{location.hash=b.dataset.v}));
@@ -77,10 +77,10 @@ $("#srchBtn").addEventListener("click",()=>{location.hash="buscar"});
 
 function render(){
   if(S.auth!=="in"){
-    $("#tabs").style.display="none";$("#blueBtn").style.display="none";$("#srchBtn").style.display="none";$("#outBtn").style.display=S.auth==="pending"?"":"none";
+    $("#tabs").style.display="none";$("#menuBtn").style.display="none";cerrarMenu();$("#blueBtn").style.display="none";$("#srchBtn").style.display="none";$("#outBtn").style.display=S.auth==="pending"?"":"none";
     $("#view").innerHTML=vLogin();bindLogin();return}
   const enc=isEnc();
-  $("#tabs").style.display="";$("#outBtn").style.display="";$("#srchBtn").style.display=enc?"none":"";$("#blueBtn").style.display=enc?"none":"";
+  $("#tabs").style.display="";$("#menuBtn").style.display="";$("#outBtn").style.display="";$("#srchBtn").style.display=enc?"none":"";$("#blueBtn").style.display=enc?"none":"";
   document.querySelectorAll("#tabs button").forEach(b=>{b.style.display=enc&&!VIEWS_ENC.includes(b.dataset.v)?"none":"";if(b.dataset.v==="caja")b.textContent=enc?"Gastos":"Caja"});
   $("#tabs").style.gridTemplateColumns=`repeat(${enc?4:7},1fr)`;
   const v=cur();
@@ -92,7 +92,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -756,6 +756,7 @@ function bindBuscar(){
 /* ---------- eventos de vistas ---------- */
 function bindView(v){
   const V=$("#view");
+  if(v==="cierre")bindCierre(V);
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
   V.querySelectorAll("[data-edit-pres]").forEach(b=>b.onclick=()=>openPres(S.pres.find(x=>x.id===b.dataset.editPres)));
@@ -1471,10 +1472,12 @@ async function copiaSeguridad(){
 }
 
 /* ---------- conexión a Supabase ---------- */
-const TABLAS={movimientos:"movs",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",config:null};
+const TABLAS={movimientos:"movs",cierres:"cierres",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",config:null};
 function mapErr(e){const m=(e&&e.message||"")+"";return {code:(e&&e.code==="42501")||/row-level security|permission/i.test(m)?"invalid_argument":"unavailable",message:m}}
 async function cargarTabla(t){
-  let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);if(error)throw error;all=all.concat(data);if(data.length<1000)break}
+  let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);
+    if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}  /* la tabla todavía no existe: la app sigue andando */
+    if(error)throw error;all=all.concat(data);if(data.length<1000)break}
   if(t==="config"){const g=all.find(r=>r.id==="general");if(g){const d=g.data;S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
@@ -1661,3 +1664,116 @@ function pintarHoy(){const el=document.getElementById("hoyBar");if(!el)return;
   el.innerHTML=(b&&!isEnc()?`<span class="pz"><span class="k">Blue</span> <span>Compra <span class="v">${fmt(b.compra)}</span></span> · <span>Venta <span class="v">${fmt(b.venta)}</span></span></span>`:"")+
     (c?`<span class="pz" title="${S.climaAca?"Donde estás ahora":esc(ZONA.nombre)} · hoy ${c.min}° / ${c.max}°${c.lluvia!=null?" · lluvia "+c.lluvia+"%":""}">${S.climaAca?'<span aria-hidden="true" style="font-size:11px">📍</span>':""}<span aria-hidden="true">${climaIcono(c.code)}</span> <span class="v">${c.t}°</span> <span style="opacity:.75;font-weight:500">${c.min}°/${c.max}°${c.lluvia>=40?" · 💧"+c.lluvia+"%":""}</span></span>`:"");
   el.classList.add("on")}
+
+
+/* ---------- menú lateral (☰) ---------- */
+function menuItems(){
+  const enc=isEnc();
+  if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"]]]];
+  return [
+    ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
+    ["Dinero",[["caja","💵","Cajas y movimientos"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
+    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Presupuestos"]]],
+    ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
+}
+function pintarMenu(){
+  const d=$("#drawer"),v=cur();
+  d.innerHTML=`<div class="dh"><b>${esc(S.perfil?.nombre||"Menú")}</b><button type="button" class="btn sm" id="menuClose" aria-label="Cerrar menú">✕</button></div>
+  ${menuItems().map(([g,its])=>`<div class="grp">${esc(g)}</div>${its.map(([k,ic,t])=>`<a href="#${k}" ${k===v?'aria-current="page"':""}><span class="ic" aria-hidden="true">${ic}</span>${esc(t)}</a>`).join("")}`).join("")}
+  ${isEnc()?"":`<div class="grp">Administración</div>
+    <button type="button" class="it" data-madm="pagorem"><span class="ic" aria-hidden="true">📄</span>Pago con remito</button>
+    <button type="button" class="it" data-madm="users"><span class="ic" aria-hidden="true">👥</span>Usuarios y contraseñas</button>
+    <button type="button" class="it" data-madm="cfg"><span class="ic" aria-hidden="true">⚙️</span>Ajustes: precios, jornal y saldos</button>
+    <button type="button" class="it" data-madm="pack"><span class="ic" aria-hidden="true">📥</span>Importar datos (.json)</button>
+    <button type="button" class="it" data-madm="backup"><span class="ic" aria-hidden="true">💾</span>Copia de seguridad</button>`}
+  <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button>`;
+  $("#menuClose").onclick=cerrarMenu;
+  d.querySelectorAll("a").forEach(a=>a.onclick=()=>setTimeout(cerrarMenu,0));
+  d.querySelectorAll("[data-madm]").forEach(b=>b.onclick=()=>{cerrarMenu();const k=b.dataset.madm;
+    if(k==="pagorem")openMov(null,{tipo:"egreso",conRemito:true});else if(k==="users")openUsers();else if(k==="cfg")openCfg();else if(k==="pack")runPack();else if(k==="backup")copiaSeguridad()});
+  $("#menuOut").onclick=async()=>{await sb.auth.signOut();location.hash="";location.reload()};
+}
+function abrirMenu(){pintarMenu();const d=$("#drawer");d.hidden=false;$("#drawerBg").hidden=false;requestAnimationFrame(()=>d.classList.add("open"));$("#menuBtn").setAttribute("aria-expanded","true");setTimeout(()=>{const a=d.querySelector('[aria-current="page"]')||d.querySelector("a");a&&a.focus()},60)}
+function cerrarMenu(){const d=$("#drawer");if(!d||d.hidden)return;d.classList.remove("open");$("#drawerBg").hidden=true;$("#menuBtn").setAttribute("aria-expanded","false");setTimeout(()=>{d.hidden=true},200)}
+$("#menuBtn").addEventListener("click",()=>$("#drawer").hidden?abrirMenu():cerrarMenu());
+$("#drawerBg").addEventListener("click",cerrarMenu);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")cerrarMenu()});
+
+/* ---------- apertura y cierre de cajas ---------- */
+function diaAnterior(f){const d=new Date(f+"T12:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10)}
+function saldoCajaHasta(c,hasta){const desde=S.cfg.cajasDesde||"";let s=+((S.cfg.saldosIniciales||{})[c])||0;
+  for(const m of S.movs){const f=m.fecha||"";if(desde&&f<desde)continue;if(f>hasta)continue;const v=+m.monto||0;
+    if(m.tipo==="pase"){if(m.caja===c)s-=v;if(m.cajaDestino===c)s+=v}else if(m.caja===c)s+=m.tipo==="ingreso"?v:-v}
+  return s}
+function movDia(c,f){let ent=0,sal=0,n=0;for(const m of S.movs){if(m.fecha!==f)continue;const v=+m.monto||0;
+    if(m.tipo==="pase"){if(m.cajaDestino===c){ent+=v;n++}if(m.caja===c){sal+=v;n++}}
+    else if(m.caja===c){n++;if(m.tipo==="ingreso")ent+=v;else sal+=v}}
+  return {ent,sal,n}}
+function datosCierre(c,f){const ap=saldoCajaHasta(c,diaAnterior(f)),{ent,sal,n}=movDia(c,f);return {apertura:ap,entradas:ent,salidas:sal,ent,sal,teorico:ap+ent-sal,cant:n}}
+function vCierre(){
+  const enc=isEnc(),f=S.filt.cierreF||hoy();
+  const cajas=enc?[S.perfil?.caja].filter(Boolean):CAJAS.filter(c=>c!=="General"||S.movs.some(m=>m.caja==="General"||m.cajaDestino==="General"));
+  if(S.sinCierres)return `<h2>Apertura y cierre de cajas</h2><div class="banner">Falta un paso en la base de datos: ejecutar en Supabase el archivo <b>7_cierres_de_caja.sql</b>. Hasta entonces, el cierre se puede ver pero no guardar.</div>`+tablaCierre(cajas,f,true);
+  const hist=[...S.cierres].filter(x=>!enc||x.caja===S.perfil?.caja).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(a.caja||"").localeCompare(b.caja||"")).slice(0,40);
+  return `<div class="row between"><h2>Apertura y cierre de cajas</h2></div>
+  <div class="row" style="align-items:flex-end;gap:10px"><label class="f">Día<input type="date" id="ci_f" value="${esc(f)}" max="${hoy()}"></label>
+    <button class="btn sm" id="ci_hoy">Hoy</button>${enc?"":`<button class="btn sm" id="ci_wa">Copiar resumen del día</button>`}</div>
+  <p class="note" style="margin:0">Apertura = saldo con el que arrancó la caja ese día. Contá la plata que hay realmente y ponela en “Contado”: la app calcula la diferencia. Si hay diferencia, podés registrarla como ajuste para que el saldo quede igual a la realidad.</p>
+  ${tablaCierre(cajas,f,false)}
+  ${enc?"":resumenDiaHtml(f)}
+  <section class="card"><h3 style="margin-bottom:8px">Últimos cierres</h3>${hist.length?`<div class="list">${hist.map(x=>{const now=datosCierre(x.caja,x.fecha),cambio=Math.abs(now.teorico-(x.ajusteMovId?+x.contado:+x.teorico||0))>=1;
+    return `<div class="item" style="cursor:default"><span class="t">${esc(fdate(x.fecha))} · Caja ${esc(x.caja)}</span><span class="s">Teórico ${fmt(x.teorico)} · Contado ${fmt(x.contado)}${x.cerradoPor?" · "+esc(x.cerradoPor):""}${x.nota?" · "+esc(x.nota):""}${cambio?` · <b style="color:var(--bad)">⚠ se cargaron o corrigieron movimientos después del cierre</b>`:""}</span><span class="m" style="color:${Math.abs(+x.diferencia||0)<1?"var(--good)":"var(--bad)"}">${Math.abs(+x.diferencia||0)<1?"OK":(x.diferencia>0?"+ ":"− ")+fmt(Math.abs(x.diferencia))}</span></div>`}).join("")}</div>`:`<div class="empty">Todavía no hay cierres.</div>`}</section>`;
+}
+function tablaCierre(cajas,f,soloVer){
+  return `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">${cajas.map(c=>{const d=datosCierre(c,f),ya=S.cierres.find(x=>x.caja===c&&x.fecha===f);
+    return `<section class="card" data-ci="${esc(c)}" style="display:flex;flex-direction:column;gap:6px">
+      <div class="row between"><h3>Caja ${esc(c)}</h3>${ya?`<span class="pill p-good">Cerrada</span>`:`<span class="pill p-warn">Abierta</span>`}</div>
+      <table><tbody><tr><td>Apertura</td><td>${fmt(d.apertura)}</td></tr>
+        <tr><td>Entradas${d.cant?` <span class="note">(${d.cant} mov.)</span>`:""}</td><td style="color:var(--good)">${d.ent?"+ "+fmt(d.ent):"—"}</td></tr>
+        <tr><td>Salidas</td><td>${d.sal?"− "+fmt(d.sal):"—"}</td></tr></tbody>
+        <tfoot><tr><td>Debería haber</td><td>${fmt(d.teorico)}</td></tr></tfoot></table>
+      <label class="f">Contado (lo que hay de verdad)<input data-cont inputmode="decimal" value="${ya?ya.contado:""}" placeholder="${Math.round(d.teorico)}" ${soloVer?"disabled":""}></label>
+      <div class="row between"><span data-dif>${ya?difHtml(ya.contado-d.teorico):""}</span>${soloVer?"":`<button class="btn sm ${ya?"":"pri"}" data-cerrar>${ya?"Actualizar cierre":"Cerrar caja"}</button>`}</div>
+    </section>`}).join("")}</div>
+  ${soloVer||cajas.length<2?"":`<div class="row between"><span class="note">Las cajas sin “Contado” se cierran con lo que debería haber.</span><button class="btn pri" id="ci_todas">Cerrar todas las cajas</button></div>`}`;
+}
+const difHtml=d=>Math.abs(d)<1?`<span style="color:var(--good)">OK</span>`:`<b style="color:var(--bad)">${d>0?"+ sobra ":"− falta "}${fmt(Math.abs(d))}</b>`;
+function resumenDia(f){const mv=S.movs.filter(m=>m.fecha===f);const eg=mv.filter(m=>m.tipo==="egreso"),ing=mv.filter(m=>m.tipo==="ingreso"&&!/cambio/i.test(m.categoria||""));
+  const porObra={};for(const m of eg){const k=obraNombre(m.obra);porObra[k]=(porObra[k]||0)+(+m.monto||0)}
+  const jor=S.jorn.filter(j=>j.fecha===f),jc=jor.reduce((a,j)=>a+(+j.cantidad||0),0);
+  const act=sortObras(obrasActivas()).filter(o=>o.estado==="En curso"),sinBit=act.filter(o=>!S.bit.some(b=>b.obra===o.id&&b.fecha===f));
+  return {eg:eg.reduce((a,m)=>a+(+m.monto||0),0),ing:ing.reduce((a,m)=>a+(+m.monto||0),0),porObra,jor,jc,sinBit}}
+function resumenDiaHtml(f){const r=resumenDia(f);
+  return `<section class="card"><h3 style="margin-bottom:8px">Resumen del día ${esc(fdate(f))}</h3>
+  <div class="grid"><div class="stat"><div class="lbl">Entró</div><div class="num" style="color:var(--good)">${fmt(r.ing)}</div></div><div class="stat"><div class="lbl">Salió</div><div class="num neg">${fmt(r.eg)}</div></div><div class="stat"><div class="lbl">Jornales</div><div class="num">${r.jc}</div></div></div>
+  ${Object.keys(r.porObra).length?`<table style="margin-top:8px"><tbody>${Object.entries(r.porObra).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>Gastos ${esc(k)}</td><td>${fmt(v)}</td></tr>`).join("")}</tbody></table>`:""}
+  ${r.sinBit.length?`<p class="note" style="margin:8px 0 0">Falta la bitácora de: <b>${r.sinBit.map(o=>esc(o.nombre)).join(", ")}</b></p>`:`<p class="note" style="margin:8px 0 0">Bitácora completa ✅</p>`}</section>`}
+function textoResumen(f){const r=resumenDia(f),cajas=CAJAS.filter(c=>c!=="General"||S.movs.some(m=>m.caja==="General"||m.cajaDestino==="General"));
+  let t=`*CIERRE DEL DÍA ${fdate(f)} – Sinner Construcciones*\n\n`;
+  for(const c of cajas){const d=datosCierre(c,f),ya=S.cierres.find(x=>x.caja===c&&x.fecha===f);
+    t+=`• Caja ${c}: apertura ${fmt(d.apertura)} | +${fmt(d.ent)} | −${fmt(d.sal)} | cierre ${fmt(d.teorico)}${ya?` | contado ${fmt(ya.contado)}${Math.abs(ya.contado-d.teorico)>=1?` (${ya.contado>d.teorico?"sobra":"falta"} ${fmt(Math.abs(ya.contado-d.teorico))})`:" ✅"}`:" | sin cerrar"}\n`}
+  t+=`\nEntró: ${fmt(r.ing)} · Salió: ${fmt(r.eg)} · Jornales: ${r.jc}\n`;
+  for(const [k,v] of Object.entries(r.porObra))t+=`  - ${k}: ${fmt(v)}\n`;
+  if(r.sinBit.length)t+=`\nFalta bitácora: ${r.sinBit.map(o=>o.nombre).join(", ")}\n`;
+  return t}
+async function guardarCierre(c,f,contadoTxt,preguntar){
+  const d=datosCierre(c,f),cont=contadoTxt===""?d.teorico:num(contadoTxt),dif=Math.round((cont-d.teorico)*100)/100;
+  const prev=S.cierres.find(x=>x.caja===c&&x.fecha===f);let ajusteMovId=prev&&prev.ajusteMovId||"";
+  if(Math.abs(dif)>=1&&preguntar){
+    if(confirm(`Caja ${c}: ${dif>0?"sobran":"faltan"} ${fmt(Math.abs(dif))}.\n\n¿Registro un ajuste "Diferencia de caja" para que el saldo de la app quede igual a lo contado?\n\n(Aceptar = sí, registrar ajuste · Cancelar = cerrar igual sin ajuste)`)){
+      const ref=db.collection("movimientos").doc(ajusteMovId||undefined);
+      await ref.set({fecha:f,tipo:dif>0?"ingreso":"egreso",caja:c,obra:"_empresa",categoria:"Diferencia de caja",monto:Math.abs(dif),detalle:`Diferencia de caja al cierre del ${fdate(f)} (${dif>0?"sobrante":"faltante"})`,creado:Date.now()});
+      ajusteMovId=ref.id}}
+  const ref=db.collection("cierres").doc(`${c}-${f}`.replace(/[^\w-]/g,"_"));
+  await ref.set({caja:c,fecha:f,apertura:d.apertura,entradas:d.ent,salidas:d.sal,teorico:d.teorico,contado:cont,diferencia:dif,ajusteMovId,cerradoPor:S.perfil?.nombre||"",creado:prev?.creado||Date.now()});
+}
+function bindCierre(V){
+  const f=S.filt.cierreF||hoy();
+  const fi=V.querySelector("#ci_f");if(fi)fi.onchange=()=>{S.filt.cierreF=fi.value||hoy();render()};
+  const bh=V.querySelector("#ci_hoy");if(bh)bh.onclick=()=>{S.filt.cierreF=hoy();render()};
+  V.querySelectorAll("[data-ci]").forEach(tr=>{const c=tr.dataset.ci,inp=tr.querySelector("[data-cont]");
+    if(inp)inp.oninput=()=>{const d=datosCierre(c,f);tr.querySelector("[data-dif]").innerHTML=inp.value===""?"":difHtml(num(inp.value)-d.teorico)};
+    const b=tr.querySelector("[data-cerrar]");if(b)b.onclick=async()=>{try{await guardarCierre(c,f,inp.value,true);toast("Caja "+c+" cerrada")}catch(e){toast(errMsg(e))}}});
+  const bt=V.querySelector("#ci_todas");if(bt)bt.onclick=async()=>{try{for(const tr of V.querySelectorAll("[data-ci]"))await guardarCierre(tr.dataset.ci,f,tr.querySelector("[data-cont]").value,true);toast("Cajas cerradas")}catch(e){toast(errMsg(e))}};
+  const bw=V.querySelector("#ci_wa");if(bw)bw.onclick=()=>navigator.clipboard.writeText(textoResumen(f)).then(()=>toast("Resumen copiado: pegalo en WhatsApp"));
+}
