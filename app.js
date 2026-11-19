@@ -68,7 +68,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 15:50";
+const VERSION="19/11 16:05";
 const VIEWS=["fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1356,18 +1356,32 @@ function vLegajo(){
   const o=S.obras.find(x=>x.id===S.legObra);
   if(!o)return `<div class="card empty">Elegí una obra desde Obras.</div>`;
   const r=resObra(o.id),f=fechasObra(o),cl=S.cli.find(c=>c.id===o.clienteId);
-  const ultM=S.movs.filter(m=>m.obra===o.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,8);
+  const porF=(a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0);
+  const ING=S.movs.filter(m=>m.obra===o.id&&m.tipo==="ingreso").sort(porF);
+  const EGR=S.movs.filter(m=>m.obra===o.id&&m.tipo==="egreso").sort(porF);
+  const tot=L=>L.reduce((a,m)=>a+(+m.monto||0),0);
+  const rub={};for(const m of EGR){const k=m.categoria||"Otros";(rub[k]=rub[k]||[]).push(m)}
+  const egTot=r.gastos+r.costoJ;
+  const linea=m=>`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria||"Movimiento")}</span><span class="s">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}${m.usd?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):""):""}</span><span class="m">${fmt(m.monto)}</span></button>`;
+  const rubros=Object.entries(rub).sort((a,b)=>tot(b[1])-tot(a[1]));
   const ultB=S.bit.filter(b=>b.obra===o.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,5);
   return `<div class="row between"><button class="btn sm" data-go="obras">← Obras</button><button class="btn sm" id="legEdit">Editar datos de la obra</button></div>
   <section class="card" style="display:flex;flex-direction:column;gap:6px">
     <div class="row between"><h2>${esc(o.nombre)}</h2><span class="pill ${o.estado==="En curso"?"p-acc":o.estado==="Terminada"?"p-mut":"p-warn"}">${esc(o.estado||"En curso")}</span></div>
     <div class="note">${o.cliente?`Cliente: ${cl?`<a href="#cliente" data-cli="${esc(cl.id)}">${esc(o.cliente)}</a>`:esc(o.cliente)} · `:""}Encargado: ${esc(o.encargado||"—")}${f.ini?" · Desde "+esc(fdate(f.ini)):""}${f.fin?" al "+esc(fdate(f.fin)):""}${o.contratoUsd?" · Contrato "+fmtU(o.contratoUsd):""}</div>
     ${o.notas?`<div class="note">${esc(o.notas)}</div>`:""}
-    <div class="mini" style="margin-top:6px"><div>Cobrado<b>${fmt(r.cobros)}</b></div><div>Gastos<b>${fmt(r.gastos)}</b></div><div>Jornales<b>${r.cantJ} · ${fmt(r.costoJ)}</b></div><div>Resultado<b style="color:${r.res<0?"var(--bad)":"var(--good)"}">${fmt(r.res)}</b></div></div>
+    <div class="grid" style="margin-top:6px"><div class="card stat"><div class="lbl">Ingresos</div><div class="num pos">${fmt(r.cobros)}</div></div>
+      <div class="card stat"><div class="lbl">Egresos</div><div class="num neg">${fmt(egTot)}</div></div>
+      <div class="card stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":""}">${fmt(r.res)}</div></div></div>
   </section>
+  <section class="card" style="border-color:var(--good)"><div class="row between"><h3>Ingresos (${ING.length})</h3><b class="pos">${fmt(r.cobros)}</b></div>
+    ${ING.length?`<div class="list" style="margin-top:6px">${ING.map(linea).join("")}</div>`:`<div class="empty">Todavía no hay cobros cargados para esta obra.</div>`}</section>
+  <section class="card" style="border-color:var(--bad)"><div class="row between"><h3>Egresos por rubro</h3><b class="neg">${fmt(egTot)}</b></div>
+    <p class="note" style="margin:2px 0 4px">Tocá un rubro para ver cada gasto.</p>
+    ${rubros.map(([k,L])=>`<details class="grpd"><summary><span>${esc(k)} <span class="note">(${L.length})</span></span><b>${fmt(tot(L))}</b></summary><div class="list">${L.map(linea).join("")}</div></details>`).join("")}
+    <details class="grpd"><summary><span>Mano de obra <span class="note">(${r.cantJ} jornales)</span></span><b>${fmt(r.costoJ)}</b></summary><p class="note" style="margin:0 0 10px">Sale de lo pagado en Sueldos a esta obra; los días sin sueldo pagado se calculan con jornales × costo del jornal. El detalle por día está en Jornales.</p></details>
+    ${!rubros.length&&!r.costoJ?`<div class="empty">Todavía no hay gastos cargados para esta obra.</div>`:""}</section>
   ${archivosHtml(o.id,LEG_CATS,"Archivos del legajo","en esta obra")}
-  <section class="card"><div class="row between" style="margin-bottom:8px"><h3>Últimos movimientos</h3><button class="btn sm" id="legSrch">Ver todos</button></div>
-    ${ultM.length?`<div class="list">${ultM.map(m=>`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria)}</span><span class="s">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}</span><span class="m" style="color:${m.tipo==="ingreso"?"var(--good)":"var(--ink)"}">${m.tipo==="ingreso"?"+ ":"− "}${fmt(m.monto)}</span></button>`).join("")}</div>`:`<div class="empty">Sin movimientos.</div>`}</section>
   <section class="card"><h3 style="margin-bottom:8px">Bitácora reciente</h3>
     ${ultB.length?`<div class="list">${ultB.map(b=>`<button class="item" data-edit-bit="${esc(b.id)}"><span class="t">${esc(fdate(b.fecha))}</span><span class="s">${b.motivo&&b.trabajo!=="si"?esc(b.motivo)+" — ":""}${esc(b.detalle||"")}</span><span class="m">${pillTrab(b.trabajo)}</span></button>`).join("")}</div>`:`<div class="empty">Sin registros de bitácora.</div>`}</section>`;
 }
