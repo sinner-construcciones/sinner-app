@@ -68,8 +68,8 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 11:20";
-const VIEWS=["portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
+const VERSION="19/11 11:40";
+const VIEWS=["fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -96,7 +96,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -764,6 +764,7 @@ function bindView(v){
   const V=$("#view");
   if(v==="cierre")bindCierre(V);
   if(v==="presupuestos")bindPrecios(V);
+  if(v==="fede")bindFede(V);
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
   V.querySelectorAll("[data-edit-pres]").forEach(b=>b.onclick=()=>openPres(S.pres.find(x=>x.id===b.dataset.editPres)));
@@ -857,6 +858,7 @@ function openMov(m,preset){
     <label class="f">Monto en pesos<input id="m_monto" inputmode="decimal" value="${m.monto||""}" required placeholder="0"></label>
     <div id="wObra" style="display:flex;flex-direction:column;gap:12px">
       <label class="f">Obra<select id="m_obra"><option value="">Elegí…</option>${obraOpts(m.obra,true)}</select></label>
+      <label class="f" id="wRubP">Gasto personal de Federico: ¿de qué?<select id="m_rubp">${RUBROS_FEDE.map(r=>`<option ${m.rubroPersonal===r?"selected":""}>${esc(r)}</option>`).join("")}</select></label>
       <label class="f">Categoría<select id="m_cat">${(m.categoria&&!CATEGORIAS.includes(m.categoria)?[m.categoria,...CATEGORIAS]:CATEGORIAS).map(c=>`<option ${m.categoria===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
     </div>
     <label class="f" id="wVeh">Vehículo<select id="m_veh"><option value="">—</option>${vehs().map(v=>`<option value="${esc(v.id)}" ${m.vehiculo===v.id?"selected":""}>${esc(v.nombre)}${v.patente?" · "+esc(v.patente):""}</option>`).join("")}</select></label>
@@ -874,7 +876,9 @@ function openMov(m,preset){
       $("#wUsdF").style.display=st.enUsd?"grid":"none";$("#m_monto").readOnly=false;
       if($("#wRem"))$("#wRem").style.display=st.tipo==="egreso"?"":"none";
       $("#wVeh").style.display=st.tipo==="egreso"&&vehs().length&&/combustible|mantenimiento veh|vi[aá]tic/i.test($("#m_cat").value)?"":"none";
-      if(!e&&st.tipo==="ingreso"&&$("#m_cat").value==="Materiales")$("#m_cat").value="Pago recibido"};
+      if(!e&&st.tipo==="ingreso"&&$("#m_cat").value==="Materiales")$("#m_cat").value="Pago recibido";
+      $("#wRubP").style.display=st.tipo==="egreso"&&($("#m_obra").value==="_federico"||$("#m_cat").value==="Personal Federico")?"":"none"};
+    $("#m_obra").addEventListener("change",()=>{if($("#m_obra").value==="_federico")$("#m_cat").value="Personal Federico";upd()});
     sh.querySelectorAll("#segTipo button").forEach(b=>b.onclick=()=>{st.tipo=b.dataset.t;upd()});
     $("#m_cat").addEventListener("change",upd);
     if(isEnc()){$("#segTipo").style.display="none";st.tipo="egreso"}
@@ -890,7 +894,9 @@ function openMov(m,preset){
       const d={fecha:$("#m_fecha").value,tipo:st.tipo,caja:$("#m_caja").value,monto,detalle:$("#m_det").value.trim(),creado:m.creado};
       for(const k of ["reciboNro","remitoNro","remitoA","remitoDoc","remitoForma","remitoItems","origen"])if(m[k]!=null&&m[k]!=="")d[k]=m[k];
       if(st.tipo==="pase"){d.cajaDestino=$("#m_dest").value;if(d.cajaDestino===d.caja)return toast("Elegí dos cajas distintas")}
-      else{d.obra=$("#m_obra").value;d.categoria=$("#m_cat").value;if(!d.obra)return toast("Elegí la obra (o “Sin obra”)")}
+      else{d.obra=$("#m_obra").value;d.categoria=$("#m_cat").value;if(!d.obra)return toast("Elegí la obra (o “Sin obra”)");
+        if(d.categoria==="Personal Federico"&&d.tipo==="egreso")d.obra="_federico";
+        if(d.obra==="_federico"&&d.tipo==="egreso"){d.categoria="Personal Federico";d.rubroPersonal=$("#m_rubp").value}}
       if(st.enUsd){d.usd=num($("#m_usd").value);d.cotizacion=num($("#m_cot").value);
         if(!d.usd||!d.cotizacion)return toast("Completá los dólares y a cuánto los tomaron");
         if(num(S.cfg.cotizacion))d.cotizacionBlue=num(S.cfg.cotizacion)}
@@ -1689,7 +1695,7 @@ function menuItems(){
   if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"]]]];
   return [
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
-    ["Dinero",[["caja","💵","Cajas y movimientos"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
+    ["Dinero",[["caja","💵","Cajas y movimientos"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
     ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Precios y presupuestos"]]],
     ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
 }
@@ -1957,3 +1963,42 @@ function bindPrecios(V){
     navigator.clipboard.writeText(t).then(()=>toast("Copiado"))};
 }
 function bindProd(V){V.querySelectorAll("[data-prod]").forEach(b=>b.onclick=()=>openProd(lista().find(x=>x.id===b.dataset.prod)))}
+
+
+/* ---------- caja y gastos personales de Federico ---------- */
+const RUBROS_FEDE=["Casa","Familia","Auto particular","Tarjeta personal","Salud","Comida y salidas","Impuestos y servicios","Retiro en efectivo","Otros"];
+const esPersonalFede=m=>m.tipo==="egreso"&&(m.obra==="_federico"||m.categoria==="Personal Federico");
+function grupoSalida(m){if(esPersonalFede(m))return "Gastos personales";if(m.obra&&m.obra.startsWith("_"))return "Empresa";return "Obras"}
+function vFede(){
+  if(!isAdmin())return `<div class="empty">Solo administración.</div>`;
+  const C="Federico",f=S.filt,mes=f.fmes||hoy().slice(0,7);
+  const meses=[...new Set(S.movs.map(m=>(m.fecha||"").slice(0,7)).filter(Boolean).concat(hoy().slice(0,7)))].sort().reverse();
+  const desde=S.cfg.cajasDesde||"";const enMes=m=>mes==="todo"?(m.fecha||"")>=desde:(m.fecha||"").startsWith(mes);
+  const M=S.movs.filter(enMes);
+  const entr=M.filter(m=>(m.tipo==="ingreso"&&m.caja===C)||(m.tipo==="pase"&&m.cajaDestino===C));
+  const sal=M.filter(m=>(m.tipo==="egreso"&&m.caja===C)||(m.tipo==="pase"&&m.caja===C));
+  const pers=M.filter(esPersonalFede);
+  const sum=L=>L.reduce((a,m)=>a+(+m.monto||0),0);
+  const gE={},gS={},gP={};
+  for(const m of entr){const k=m.tipo==="pase"?"Pases desde caja "+m.caja:(m.obra&&!m.obra.startsWith("_")?"Cobros de obras":"Otras entradas");(gE[k]=gE[k]||[]).push(m)}
+  for(const m of sal){const k=m.tipo==="pase"?"Pases a otras cajas":grupoSalida(m);(gS[k]=gS[k]||[]).push(m)}
+  for(const m of pers){const k=m.rubroPersonal||"Sin clasificar";(gP[k]=gP[k]||[]).push(m)}
+  const otrasCajas=pers.filter(m=>m.caja!==C);
+  const item=m=>`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria||"")}</span><span class="s">${esc(fdate(m.fecha))} · ${m.tipo==="pase"?`${esc(m.caja)} → ${esc(m.cajaDestino)}`:esc(obraNombre(m.obra))+(m.rubroPersonal?" · "+esc(m.rubroPersonal):"")} · Caja ${esc(m.caja)}</span><span class="m">${fmt(m.monto)}</span></button>`;
+  const grupos=(G,signo)=>Object.entries(G).sort((a,b)=>sum(b[1])-sum(a[1])).map(([k,L])=>`<details class="grpd"><summary><span>${esc(k)} <span class="note">(${L.length})</span></span><b class="${signo}">${fmt(sum(L))}</b></summary><div class="list">${L.sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).map(item).join("")}</div></details>`).join("")||`<div class="empty">Nada en este período.</div>`;
+  const te=sum(entr),ts=sum(sal),tp=sum(pers);
+  return `<div class="row between"><h2>Caja y gastos de Federico</h2>
+    <label class="f" style="min-width:160px">Mes<select id="fdMes"><option value="todo" ${mes==="todo"?"selected":""}>${desde?"Todo desde "+esc(fdate(desde)):"Todos"}</option>${meses.filter(m=>!desde||m>=desde.slice(0,7)).map(m=>`<option value="${m}" ${mes===m?"selected":""}>${esc(mlabel(m))}</option>`).join("")}</select></label></div>
+  <div class="grid"><div class="card stat"><div class="lbl">Saldo hoy en su caja</div><div class="num ${saldoCaja(C)<0?"neg":""}">${fmt(saldoCaja(C))}</div></div>
+    <div class="card stat"><div class="lbl">Entró ${mes==="todo"?"":"en el mes"}</div><div class="num pos">${fmt(te)}</div></div>
+    <div class="card stat"><div class="lbl">Salió ${mes==="todo"?"":"en el mes"}</div><div class="num neg">${fmt(ts)}</div></div>
+    <div class="card stat"><div class="lbl">Gastos personales</div><div class="num neg">${fmt(tp)}</div></div></div>
+  <section class="card"><h3 style="margin-bottom:6px">Qué entró a la caja de Federico</h3>${grupos(gE,"pos")}</section>
+  <section class="card"><h3 style="margin-bottom:6px">En qué salió</h3><p class="note" style="margin:0 0 6px">Obras, empresa, gastos personales y pases a otras cajas. Tocá un grupo para ver cada carga.</p>${grupos(gS,"neg")}</section>
+  <section class="card"><h3 style="margin-bottom:6px">Gastos personales de Federico por rubro</h3>
+    <p class="note" style="margin:0 0 6px">Cuenta todos sus gastos personales, salgan de su caja o de otra${otrasCajas.length?` (${otrasCajas.length} pagados desde otras cajas: ${fmt(sum(otrasCajas))})`:""}.</p>${grupos(gP,"neg")}</section>
+  <div class="fab"><button class="btn pri" id="fdNew">+ Gasto personal de Federico</button></div>`;
+}
+function bindFede(V){const s=V.querySelector("#fdMes");if(s)s.onchange=()=>{S.filt.fmes=s.value;render()};
+  const n=V.querySelector("#fdNew");if(n)n.onclick=()=>openMov(null,{tipo:"egreso",caja:"Federico",obra:"_federico",categoria:"Personal Federico"});
+  V.querySelectorAll("[data-edit-mov]").forEach(b=>b.onclick=()=>openMov(S.movs.find(x=>x.id===b.dataset.editMov)))}
