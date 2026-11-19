@@ -17,7 +17,9 @@ const SIN_OBRA = [
 ];
 const CATEGORIAS = ["Pago recibido","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
 const MOTIVOS = ["Lluvia / clima","Demora del hierro","Falta de material","Falta de personal","Espera de definiciones del cliente","Feriado","Problema de equipo","Otro"];
-const DEF_CFG = {cotizacion:0, costoJornal:100000, precioJornal:0, precios:{hormigon:180000, bombaFija:780000, bombaM3:21000, macrofibra:63000}, rend:{pared:10, revoque:12, platea:16}, cajasDesde:"2026-11-01", saldosIniciales:{Lucas:97469.07}, ultimoRecibo:2};
+const DEF_CFG = {cotizacion:0, costoJornal:100000, precioJornal:0, listaPrecios:`Concrehaus Nro. 40 (sep 2026) – precios NETOS en U$S sin IVA, camión completo puesto en Córdoba. Ancho útil del panel 1,20 m.
+Paneles EPS (U$S/m²): PCE 04 9,07 · PCE 06 10,53 · PCE 08 11,84 · PCE 10 13,17 · PCE 12 14,80 · PCE 14 16,28 · PCE 16 17,90 · PCE 18 19,97
+Mallas (U$S/unidad): MPC 15 plana 22,5x123 1,18 · MPC 30 plana 30x123 1,69 · MAC 15 angular 18,5x18,5x123 2,11 · MAC 30 angular 30x30x123 3,06 · MUC 08/12 "U" 2,36 · MUC 14/18 "U" 2,64 · MEC 2401 entera 124x240 9,86`, precios:{hormigon:180000, bombaFija:780000, bombaM3:21000, macrofibra:63000}, rend:{pared:10, revoque:12, platea:16}, cajasDesde:"2026-11-01", saldosIniciales:{Lucas:97469.07}, ultimoRecibo:2};
 const S = {movs:[], cierres:[], obras:[], jorn:[], bit:[], pres:[], inv:[], emp:[], liqs:[], cli:[], prov:[], imp:undefined, owner:false, importing:null, auth:"loading", rol:null, perfil:null, authMsg:"", cfg:structuredClone(DEF_CFG), cfgVer:false, loaded:{m:0,o:0,j:0,b:0}, uid:null, filt:{caja:"Todas", mes:hoy().slice(0,7)}, err:null, stale:false};
 let db=null, dict=null, dl=true, sb=null;
 
@@ -235,7 +237,9 @@ function vObras(){
 function vPresupuestos(){
   const c=S.cot||(S.cot={pared:"",revoque:"",platea:"",bomba:true,fibra:"",extra:[]});
   const L=[...S.pres].sort((a,b)=>(b.numero||0)-(a.numero||0));
-  return `<div class="row between"><h2>Presupuestos</h2><button class="btn pri sm" data-new="pres">+ Nuevo presupuesto</button></div>
+  return `<div class="row between"><h2>Presupuestos</h2><button class="btn sm" data-new="pres">+ Nuevo a mano</button></div>
+  ${isAdmin()?`<section class="card" style="border-color:var(--gold)"><div class="row between" style="gap:12px"><div><h3>🎤 Dictar presupuesto</h3><p class="note" style="margin:4px 0 0">Contale qué hay que presupuestar (medidas, materiales, trabajos, cliente) y la IA lo arma con tus precios. Después lo revisás y lo mandás.</p></div>
+    <button class="btn pri" id="dictarBtn">Dictar</button></div></section>`:""}
   <div class="list">${L.map(p=>{const t=presTot(p);return `<button class="item" data-edit-pres="${esc(p.id)}"><span class="t">N° ${esc(p.numero)} · ${esc(p.cliente||"Sin cliente")}</span>
     <span class="s">${esc(fdate(p.fecha))}${p.obra?" · "+esc(p.obra):""} · ${presPill(p.estado)}</span><span class="m">${fmt(t.total)}${t.usd?`<br><span class="note">${fmtU(t.usd)}</span>`:""}</span></button>`}).join("")||`<div class="empty">Todavía no hay presupuestos. Tocá “+ Nuevo presupuesto”.</div>`}</div>
   <h3 style="margin-top:8px">Cálculo rápido de mano de obra y hormigón</h3>
@@ -769,6 +773,7 @@ function bindView(v){
   V.querySelectorAll("[data-new-emp]").forEach(b=>b.onclick=()=>openMov(null,{obra:"_empresa",categoria:"Gastos de empresa",caja:"Numa"}));
   V.querySelectorAll("[data-new-inv]").forEach(b=>b.onclick=()=>openInv());
   V.querySelectorAll("[data-new-veh]").forEach(b=>b.onclick=()=>openVeh());
+  const db_=V.querySelector("#dictarBtn");if(db_)db_.onclick=()=>openDictado();
   V.querySelectorAll("[data-rubro]").forEach(b=>b.onclick=()=>{S.filt.rubro=S.filt.rubro===b.dataset.rubro?null:b.dataset.rubro;render()});
   V.querySelectorAll("[data-edit-veh]").forEach(b=>b.onclick=()=>openVeh(S.inv.find(x=>x.id===b.dataset.editVeh)));
   const ei=$("#expInv");if(ei)ei.onclick=exportInv;
@@ -971,6 +976,7 @@ function openCfg(){
   openSheet(`<form id="fc" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Precios y rendimientos")}
     <div class="two"><label class="f">Dólar blue de hoy <span class="note">(se actualiza solo cada 30 min)</span><input id="k_cot" inputmode="decimal" value="${c.cotizacion||""}"></label>
     <label class="f">Lo que nos cuesta el jornal<input id="k_jor" inputmode="decimal" value="${c.costoJornal}"></label></div>
+    <label class="f">Lista de precios que usa la IA para presupuestar <span class="note">(pegá acá las listas de tus proveedores)</span><textarea id="k_lista" rows="5">${esc(c.listaPrecios||"")}</textarea></label>
     <label class="f">Precio del jornal al cliente<input id="k_pj" inputmode="decimal" value="${c.precioJornal||""}" placeholder="Ej: 130000"></label>
     <p class="note" style="margin:0">La ganancia está en la diferencia entre lo que cobramos el jornal y lo que nos cuesta. El cliente solo ve el precio; la diferencia la ves vos.</p>
     <h3>Precios</h3>
@@ -1000,7 +1006,9 @@ function openCfg(){
         precios:{hormigon:num($("#k_h").value),macrofibra:num($("#k_f").value),bombaFija:num($("#k_bf").value),bombaM3:num($("#k_bm").value)},
         rend:{pared:num($("#k_rp").value)||10,revoque:num($("#k_rr").value)||12,platea:num($("#k_rl").value)||16},
         cajasDesde:$("#k_cd").value||"",saldosIniciales:Object.fromEntries([...document.querySelectorAll("[data-si]")].map(i=>[i.dataset.si,num(i.value)]))};
-      try{await db.doc("config/general").set(d);closeSheet();toast("Guardado")}catch(e){toast(errMsg(e))}};
+      d.listaPrecios=$("#k_lista").value.trim();
+      const {id:_i,_por:_p,...resto}=S.cfg;
+      try{await db.doc("config/general").set({...resto,...d});closeSheet();toast("Guardado")}catch(e){toast(errMsg(e))}};
   });
 }
 
@@ -1011,8 +1019,11 @@ function presTot(p){const sub=(p.items||[]).reduce((a,i)=>a+num(i.cant)*num(i.pr
   const cot=num(p.cotizacion)||S.cfg.cotizacion;return {sub,gan,neto,iva,total,usd:cot?total/cot:0,cot}}
 function openPres(p,extraItems){
   const e=!!(p&&p.id);
+  if(p&&!p.id&&p.desdeIA){const ia=p;p=null;openPres.ia=ia}
   const next=S.pres.reduce((a,x)=>Math.max(a,+x.numero||0),0)+1;
   const st=structuredClone(p||{numero:next,fecha:hoy(),cliente:"",obra:"",estado:"Borrador",ganancia:0,iva:0,cotizacion:S.cfg.cotizacion||0,notas:"",items:[]});
+  if(openPres.ia){const ia=openPres.ia;openPres.ia=null;st.cliente=ia.cliente||"";st.obra=ia.obra||ia.titulo||"";st.items=ia.items||[];
+    st.notas=[ia.nota,(ia.supuestos||[]).filter(Boolean).length?"Supuestos: "+ia.supuestos.filter(Boolean).join("; "):""].filter(Boolean).join("\n");st.dictado=ia.dictado||""}
   if(extraItems)st.items=[...(st.items||[]),...extraItems];
   if(!st.items.length)st.items=[{d:"",cant:1,unid:"u",precio:""}];
   const itemsHtml=()=>st.items.map((it,k)=>`<div class="card" style="padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--soft)">
@@ -1034,7 +1045,7 @@ function openPres(p,extraItems){
     <p class="note" style="margin:0">Para mano de obra poné la unidad “jornales” (o pasala desde el cálculo rápido) y abajo ves tu ganancia interna. El cliente no la ve.</p>
     <div id="p_tot" class="card">${totHtml()}</div>
     <label class="f">Notas / condiciones<textarea id="p_not" placeholder="Ej: validez 7 días, forma de pago 50% anticipo">${esc(st.notas)}</textarea></label>
-    <div class="row"><button type="button" class="btn" id="p_copy">Copiar texto</button>${dl?`<button type="button" class="btn" id="p_csv">Descargar CSV</button>`:""}<button type="button" class="btn" id="p_dup">Duplicar</button></div>
+    <div class="row"><button type="button" class="btn pri" id="p_wa">📲 Mandar por WhatsApp</button><button type="button" class="btn" id="p_copy">Copiar texto</button>${dl?`<button type="button" class="btn" id="p_csv">Descargar CSV</button>`:""}<button type="button" class="btn" id="p_dup">Duplicar</button></div>
     ${footBtns(e)}</form>`,sh=>{
     wireCommon(sh,"presupuestos",st.id);
     const refreshTot=()=>$("#p_tot").innerHTML=totHtml();
@@ -1048,6 +1059,8 @@ function openPres(p,extraItems){
       return `SINNER CONSTRUCCIONES — Presupuesto N° ${st.numero}\nFecha: ${fdate(st.fecha)}\nCliente: ${st.cliente}\n${st.obra?"Obra: "+st.obra+"\n":""}\n`+
       st.items.filter(i=>i.d||num(i.precio)).map(i=>`• ${i.d}: ${num(i.cant)} ${i.unid} × ${fmt(num(i.precio)*f)} = ${fmt(num(i.cant)*num(i.precio)*f)}`).join("\n")+
       `\n\n${num(st.iva)?`Subtotal: ${fmt(t.neto)}\nIVA ${num(st.iva)}%: ${fmt(t.iva)}\n`:""}TOTAL: ${fmt(t.total)}${t.usd?` (${fmtU(t.usd)} a dólar blue ${fmt(t.cot)})`:""}${st.notas?"\n\n"+st.notas:""}`};
+    $("#p_wa").onclick=async()=>{const t=txt();if(navigator.share){try{await navigator.share({text:t});return}catch(er){if(er&&er.name==="AbortError")return}}
+      window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank","noopener")};
     $("#p_copy").onclick=async()=>{try{await navigator.clipboard.writeText(txt());toast("Presupuesto copiado")}catch(er){toast("No se pudo copiar")}};
     const csv=$("#p_csv");if(csv)csv.onclick=()=>{collect();const t=presTot(st);const f=1;
       saveFile(`presupuesto_${st.numero}_${(st.cliente||"cliente").replace(/[^\w]+/g,"_")}.csv`,[["Sinner Construcciones - Presupuesto N° "+st.numero],["Cliente",st.cliente],["Obra",st.obra],["Fecha",fdate(st.fecha)],[],
@@ -1776,4 +1789,37 @@ function bindCierre(V){
     const b=tr.querySelector("[data-cerrar]");if(b)b.onclick=async()=>{try{await guardarCierre(c,f,inp.value,true);toast("Caja "+c+" cerrada")}catch(e){toast(errMsg(e))}}});
   const bt=V.querySelector("#ci_todas");if(bt)bt.onclick=async()=>{try{for(const tr of V.querySelectorAll("[data-ci]"))await guardarCierre(tr.dataset.ci,f,tr.querySelector("[data-cont]").value,true);toast("Cajas cerradas")}catch(e){toast(errMsg(e))}};
   const bw=V.querySelector("#ci_wa");if(bw)bw.onclick=()=>navigator.clipboard.writeText(textoResumen(f)).then(()=>toast("Resumen copiado: pegalo en WhatsApp"));
+}
+
+
+/* ---------- presupuesto dictado con IA ---------- */
+function openDictado(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,grabando=false;
+  openSheet(`<div style="display:flex;flex-direction:column;gap:12px">${sheetHead("🎤 Dictar presupuesto")}
+    <p class="note" style="margin:0">Ejemplo: “Presupuesto para Juan Pérez, casa en Santa Rosa de 8 por 10, paredes de panel de 10 cm de 2,60 de alto, con revoque de los dos lados y platea con bomba.”</p>
+    <label class="f">Lo que hay que presupuestar<textarea id="dc_txt" rows="7" placeholder="Tocá el micrófono y hablá, o escribí acá"></textarea></label>
+    <div class="row">${SR?`<button type="button" class="btn" id="dc_mic">🎤 Empezar a dictar</button>`:`<span class="note">En este celu usá el micrófono del teclado para dictar.</span>`}
+      <button type="button" class="btn pri" id="dc_go">Armar presupuesto</button></div>
+    <div id="dc_est" class="note" aria-live="polite"></div></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=()=>{try{rec&&rec.stop()}catch(e){}closeSheet()};
+    const txt=$("#dc_txt"),est=$("#dc_est");
+    if(SR){const b=$("#dc_mic");let base="";
+      b.onclick=()=>{if(grabando){rec.stop();return}
+        rec=new SR();rec.lang="es-AR";rec.continuous=true;rec.interimResults=true;base=txt.value?txt.value.trim()+" ":"";
+        rec.onresult=ev=>{let fin="",tmp="";for(let i=0;i<ev.results.length;i++){const r=ev.results[i];if(r.isFinal)fin+=r[0].transcript;else tmp+=r[0].transcript}txt.value=base+fin+tmp};
+        rec.onend=()=>{grabando=false;b.textContent="🎤 Seguir dictando";est.textContent=""};
+        rec.onerror=e=>{est.textContent=e.error==="not-allowed"?"Dale permiso al micrófono en el navegador.":"No se pudo usar el micrófono ("+e.error+").";};
+        rec.start();grabando=true;b.textContent="⏹️ Terminar";est.textContent="Escuchando… hablá tranquila."}}
+    $("#dc_go").onclick=async()=>{try{rec&&grabando&&rec.stop()}catch(e){}
+      const t=txt.value.trim();if(t.length<5)return toast("Contá qué hay que presupuestar");
+      const g=$("#dc_go");g.disabled=true;g.textContent="Armando… (unos segundos)";est.textContent="La IA está calculando cantidades y precios.";
+      try{const {data,error}=await sb.functions.invoke("presupuesto-ia",{body:{texto:t}});
+        if(error){let m="";try{m=(await error.context.json()).error}catch(_){}
+          throw new Error(m||(String(error.message||"").includes("Failed to send")?"Falta activar la IA en Supabase (función presupuesto-ia).":"La IA no respondió."))}
+        if(data&&data.error)throw new Error(data.error);
+        closeSheet();
+        setTimeout(()=>{openPres({desdeIA:true,...data,dictado:t});
+          const q=(data.preguntas||[]).filter(Boolean);if(q.length)setTimeout(()=>toast("Revisá: "+q.join(" · ")),400)},300);
+      }catch(e){g.disabled=false;g.textContent="Armar presupuesto";est.textContent="";toast(e.message||"No se pudo armar")}};
+  });
 }
