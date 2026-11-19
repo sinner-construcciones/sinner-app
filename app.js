@@ -1136,10 +1136,10 @@ async function runPack(){
   const local={movimientos:S.movs,jornales:S.jorn,bitacora:S.bit,obras:S.obras,empleados:S.emp,sueldos:S.liqs};
   const salteados=[];let total=0;
   for(const t of Object.keys(by)){by[t]=by[t].filter(r=>{
-    if(r.data.actualizar||!(+pack.version>=22))return true;
-    const L=local[t]||[];if(L.some(x=>x.id===r.id)){salteados.push(t+": ya estaba ("+r.id+")");return false}
+    if(!(+pack.version>=22))return true;
+    const L=local[t]||[];if(L.some(x=>x.id===r.id)){if(r.data.actualizar)return true;salteados.push(t+": ya estaba ("+r.id+")");return false}
     if(t==="movimientos"&&r.data.revisarDuplicado){const k=[r.data.fecha,r.data.caja,r.data.tipo,Math.round(+r.data.monto||0)].join("|");if(yaMov.get(k)){yaMov.set(k,yaMov.get(k)-1);salteados.push(`${fdate(r.data.fecha)} ${r.data.caja} ${fmt(r.data.monto)}: ya estaba cargado a mano`);return false}}
-    if((t==="jornales"||t==="bitacora")&&L.some(x=>x.fecha===r.data.fecha&&x.obra===r.data.obra)){salteados.push(`${t} ${fdate(r.data.fecha)} ${obraNombre(r.data.obra)}: ya estaba cargado`);return false}
+    if((t==="jornales"||t==="bitacora")&&L.some(x=>x.id!==r.id&&x.fecha===r.data.fecha&&x.obra===r.data.obra)){salteados.push(`${t} ${fdate(r.data.fecha)} ${obraNombre(r.data.obra)}: ya estaba cargado`);return false}
     return true});total+=by[t].length;if(!by[t].length)delete by[t]}
   if(!total)return alert("Todo lo de este archivo ya estaba cargado. No se agregó nada.\n\n"+salteados.slice(0,25).join("\n"));
   const res=Object.entries(by).map(([t,L])=>L.length+" "+t).join(", ");
