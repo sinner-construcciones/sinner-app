@@ -142,6 +142,11 @@ textarea{min-height:80px;resize:vertical}
 .drawer a:hover,.drawer button.it:hover{background:#f6f2e7}
 .drawer a[aria-current="page"]{background:#f6f2e7;box-shadow:inset 4px 0 0 var(--gold)}
 .drawer .ic{width:22px;text-align:center}
+@media (min-width:900px){
+  body.conMenu nav.tabs,body.conMenu #menuBtn,body.conMenu .drawerBg,body.conMenu #menuClose{display:none!important}
+  body.conMenu .drawer,body.conMenu .drawer[hidden]{display:flex!important;transform:none;width:250px;box-shadow:none;border-right:1px solid var(--line);z-index:5}
+  body.conMenu header.top,body.conMenu main{margin-left:250px}
+}
 .cierreT td,.cierreT th{padding:6px 4px;font-size:13px;white-space:nowrap}
 .cierreT input{width:110px;padding:6px;text-align:right}
 </style>
@@ -162,7 +167,7 @@ textarea{min-height:80px;resize:vertical}
   <button type="button" data-v="jornales">Jornales</button>
   <button type="button" data-v="bitacora">Bitácora</button>
   <button type="button" data-v="obras">Obras</button>
-  <button type="button" data-v="presupuestos">Presup.</button>
+  <button type="button" data-v="presupuestos">Precios</button>
   <button type="button" data-v="empresa">Empresa</button>
 </nav>
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>

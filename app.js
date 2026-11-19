@@ -79,9 +79,10 @@ $("#srchBtn").addEventListener("click",()=>{location.hash="buscar"});
 
 function render(){
   if(S.auth!=="in"){
-    $("#tabs").style.display="none";$("#menuBtn").style.display="none";cerrarMenu();$("#blueBtn").style.display="none";$("#srchBtn").style.display="none";$("#outBtn").style.display=S.auth==="pending"?"":"none";
+    document.body.classList.remove("conMenu");    $("#tabs").style.display="none";$("#menuBtn").style.display="none";cerrarMenu();$("#blueBtn").style.display="none";$("#srchBtn").style.display="none";$("#outBtn").style.display=S.auth==="pending"?"":"none";
     $("#view").innerHTML=vLogin();bindLogin();return}
   const enc=isEnc();
+  document.body.classList.add("conMenu");pintarMenu();
   $("#tabs").style.display="";$("#menuBtn").style.display="";$("#outBtn").style.display="";$("#srchBtn").style.display=enc?"none":"";$("#blueBtn").style.display=enc?"none":"";
   document.querySelectorAll("#tabs button").forEach(b=>{b.style.display=enc&&!VIEWS_ENC.includes(b.dataset.v)?"none":"";if(b.dataset.v==="caja")b.textContent=enc?"Gastos":"Caja"});
   $("#tabs").style.gridTemplateColumns=`repeat(${enc?4:7},1fr)`;
@@ -234,10 +235,10 @@ function vObras(){
   <div class="fab"><button class="btn pri" data-new="obra">+ Obra</button></div>`;
 }
 
-function vPresupuestos(){
+function vPresupuestosLista(){
   const c=S.cot||(S.cot={pared:"",revoque:"",platea:"",bomba:true,fibra:"",extra:[]});
   const L=[...S.pres].sort((a,b)=>(b.numero||0)-(a.numero||0));
-  return `<div class="row between"><h2>Presupuestos</h2><button class="btn sm" data-new="pres">+ Nuevo a mano</button></div>
+  return `<div class="row between"><h3>Presupuestos guardados</h3><button class="btn sm" data-new="pres">+ Nuevo a mano</button></div>
   ${isAdmin()?`<section class="card" style="border-color:var(--gold)"><div class="row between" style="gap:12px"><div><h3>🎤 Dictar presupuesto</h3><p class="note" style="margin:4px 0 0">Contale qué hay que presupuestar (medidas, materiales, trabajos, cliente) y la IA lo arma con tus precios. Después lo revisás y lo mandás.</p></div>
     <button class="btn pri" id="dictarBtn">Dictar</button></div></section>`:""}
   <div class="list">${L.map(p=>{const t=presTot(p);return `<button class="item" data-edit-pres="${esc(p.id)}"><span class="t">N° ${esc(p.numero)} · ${esc(p.cliente||"Sin cliente")}</span>
@@ -761,6 +762,7 @@ function bindBuscar(){
 function bindView(v){
   const V=$("#view");
   if(v==="cierre")bindCierre(V);
+  if(v==="presupuestos")bindPrecios(V);
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
   V.querySelectorAll("[data-edit-pres]").forEach(b=>b.onclick=()=>openPres(S.pres.find(x=>x.id===b.dataset.editPres)));
@@ -799,7 +801,7 @@ function bindView(v){
   const em=$("#expMov");if(em)em.onclick=exportMovs;
   const er=$("#expRes");if(er)er.onclick=exportRes;
   if(v==="buscar")bindBuscar();
-  if(v==="presupuestos"){
+  if(v==="presupuestos"&&$("#c_pared")){
     ["pared","revoque","platea","fibra"].forEach(k=>{const i=$("#c_"+k);i.oninput=()=>{S.cot[k]=i.value;$("#cotRes").innerHTML=cotTabla()}});
     $("#c_bomba").onchange=e=>{S.cot.bomba=e.target.checked;$("#cotRes").innerHTML=cotTabla()};
     $("#openCfg2").onclick=()=>openCfg();
@@ -1492,7 +1494,8 @@ async function cargarTabla(t){
     if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}  /* la tabla todavía no existe: la app sigue andando */
     if(error)throw error;all=all.concat(data);if(data.length<1000)break}
   if(t==="config"){const g=all.find(r=>r.id==="general");if(g){const d=g.data;S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
-    const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null}
+    const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
+    const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
 }
 async function cargarTodo(){await Promise.all(Object.keys(TABLAS).map(t=>cargarTabla(t)))}
@@ -1686,7 +1689,7 @@ function menuItems(){
   return [
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
     ["Dinero",[["caja","💵","Cajas y movimientos"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
-    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Presupuestos"]]],
+    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Precios y presupuestos"]]],
     ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
 }
 function pintarMenu(){
@@ -1823,3 +1826,128 @@ function openDictado(){
       }catch(e){g.disabled=false;g.textContent="Armar presupuesto";est.textContent="";toast(e.message||"No se pudo armar")}};
   });
 }
+
+
+/* ---------- lista de precios y calculadora de pared ---------- */
+const RUBROS_P=["Paneles","Mallas","Cemento y áridos","Hormigón","Hierros","Ferretería","Aberturas","Techos","Instalaciones","Terminaciones","Mano de obra","Otros"];
+function listaBase(){const p=S.cfg.precios||{};const U=(id,codigo,nombre,rubro,unidad,precio)=>({id,codigo,nombre,rubro,unidad,precio,moneda:"USD",proveedor:"Concrehaus",act:"2026-09"});
+  const A=(id,nombre,rubro,unidad,precio,prov)=>({id,codigo:"",nombre,rubro,unidad,precio:precio||0,moneda:"ARS",proveedor:prov||"",act:""});
+  return [U("pce04","PCE 04","Panel EPS 4 cm","Paneles","m²",9.07),U("pce06","PCE 06","Panel EPS 6 cm","Paneles","m²",10.53),U("pce08","PCE 08","Panel EPS 8 cm","Paneles","m²",11.84),U("pce10","PCE 10","Panel EPS 10 cm","Paneles","m²",13.17),
+    U("pce12","PCE 12","Panel EPS 12 cm","Paneles","m²",14.80),U("pce14","PCE 14","Panel EPS 14 cm","Paneles","m²",16.28),U("pce16","PCE 16","Panel EPS 16 cm","Paneles","m²",17.90),U("pce18","PCE 18","Panel EPS 18 cm","Paneles","m²",19.97),
+    U("mpc15","MPC 15","Malla plana 22,5 x 123","Mallas","u",1.18),U("mpc30","MPC 30","Malla plana 30 x 123","Mallas","u",1.69),U("mac15","MAC 15","Malla angular 18,5 x 18,5 x 123","Mallas","u",2.11),U("mac30","MAC 30","Malla angular 30 x 30 x 123","Mallas","u",3.06),
+    U("muc0812","MUC 08/12","Malla U (paneles 8 a 12)","Mallas","u",2.36),U("muc1418","MUC 14/18","Malla U (paneles 14 a 18)","Mallas","u",2.64),U("mec2401","MEC 2401","Malla entera 124 x 240","Mallas","u",9.86),
+    A("cemento","Cemento portland bolsa 50 kg","Cemento y áridos","bolsa"),A("arena","Arena gruesa","Cemento y áridos","m³"),A("cal","Cal hidratada bolsa 25 kg","Cemento y áridos","bolsa"),A("hidrofugo","Hidrófugo 10 L","Cemento y áridos","u"),
+    A("hormigon","Hormigón H21","Hormigón","m³",p.hormigon),A("macrofibra","Macrofibra bolsa 4 kg","Hormigón","bolsa",p.macrofibra)]}
+const lista=()=>S.lista||listaBase();
+const precioARS=it=>(+it.precio||0)*(it.moneda==="USD"?(num(S.cfg.cotizacion)||0):1);
+async function guardarLista(items){try{await db.doc("config/lista").set({items});S.lista=items;return true}catch(e){toast(errMsg(e));return false}}
+function vPresupuestos(){
+  const tab=S.filt.ptab||"lista";
+  const tabs=[["lista","Lista de precios"],["pared","Calcular pared"],["pres","Presupuestos"]];
+  return `<h2>Precios y presupuestos</h2>
+  <div class="seg" style="max-width:520px">${tabs.map(([k,l])=>`<button type="button" data-ptab="${k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>
+  ${tab==="lista"?vLista():tab==="pared"?vPared():vPresupuestosLista()}`}
+function vLista(){const L=lista(),f=S.filt;const rub=[...new Set([...RUBROS_P,...L.map(i=>i.rubro).filter(Boolean)])];
+  return `<div class="row" style="gap:8px;align-items:flex-end">
+    <label class="f" style="flex:2;min-width:180px">Buscar<input id="li_q" type="search" value="${esc(f.liq||"")}" placeholder="Ej: panel 10, cemento, malla"></label>
+    <label class="f" style="flex:1;min-width:140px">Rubro<select id="li_r"><option value="">Todos</option>${rub.map(r=>`<option ${f.lir===r?"selected":""}>${esc(r)}</option>`).join("")}</select></label></div>
+  ${isAdmin()?`<div class="row"><button class="btn sm pri" id="li_new">+ Producto</button><button class="btn sm" id="li_paste">Pegar lista de un proveedor</button><button class="btn sm" id="li_csv">Descargar lista</button></div>`:""}
+  <p class="note" style="margin:0">Los precios en dólares se pasan a pesos con el blue de hoy (${fmt(S.cfg.cotizacion||0)}). Tocá un producto para editarlo.</p>
+  <div class="list" id="li_list">${listaItemsHtml()}</div>`}
+function listaFiltrada(){const f=S.filt,q=(f.liq||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").split(/\s+/).filter(Boolean);
+  return lista().filter(i=>(!f.lir||i.rubro===f.lir)&&q.every(w=>((i.codigo||"")+" "+(i.nombre||"")+" "+(i.proveedor||"")+" "+(i.rubro||"")).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").includes(w)))
+    .sort((a,b)=>(a.rubro||"").localeCompare(b.rubro||"")||(a.nombre||"").localeCompare(b.nombre||"",undefined,{numeric:true}))}
+function listaItemsHtml(){const L=listaFiltrada();
+  return L.map(i=>`<button class="item" data-prod="${esc(i.id)}"><span class="t">${i.codigo?`<span class="note">${esc(i.codigo)}</span> `:""}${esc(i.nombre)}</span>
+    <span class="s">${esc(i.rubro||"")}${i.proveedor?" · "+esc(i.proveedor):""} · por ${esc(i.unidad||"u")}${i.act?" · act. "+esc(i.act):""}</span>
+    <span class="m">${+i.precio?`${precioARS(i)?fmt(precioARS(i)):""}${i.moneda==="USD"?`<br><span class="note">US$ ${(+i.precio).toLocaleString("es-AR")}</span>`:""}`:`<span class="pill p-warn">sin precio</span>`}</span></button>`).join("")||`<div class="empty">No hay productos con esa búsqueda.</div>`}
+function openProd(it){if(!isAdmin())return;const e=!!it;it=it||{id:"",codigo:"",nombre:"",rubro:S.filt.lir||"Otros",unidad:"u",precio:"",moneda:"ARS",proveedor:""};
+  openSheet(`<form id="fp2" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar producto":"Nuevo producto")}
+    <label class="f">Nombre<input id="pp_n" required value="${esc(it.nombre)}"></label>
+    <div class="two"><label class="f">Código<input id="pp_c" value="${esc(it.codigo||"")}"></label><label class="f">Rubro<select id="pp_r">${[...new Set([...RUBROS_P,it.rubro])].map(r=>`<option ${it.rubro===r?"selected":""}>${esc(r)}</option>`).join("")}</select></label>
+    <label class="f">Unidad<input id="pp_u" value="${esc(it.unidad||"u")}" placeholder="m², u, bolsa, m³…"></label><label class="f">Proveedor<input id="pp_p" value="${esc(it.proveedor||"")}"></label>
+    <label class="f">Precio<input id="pp_pr" inputmode="decimal" value="${esc(it.precio||"")}"></label><label class="f">Moneda<select id="pp_m"><option value="ARS" ${it.moneda!=="USD"?"selected":""}>Pesos</option><option value="USD" ${it.moneda==="USD"?"selected":""}>Dólares</option></select></label></div>
+    <div class="row between">${e?`<button type="button" class="btn danger" id="pp_del">Borrar</button>`:"<span></span>"}<button class="btn pri" type="submit">Guardar</button></div></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    $("#fp2").onsubmit=async ev=>{ev.preventDefault();const L=[...lista()];
+      const d={id:it.id||("p"+Date.now().toString(36)),codigo:$("#pp_c").value.trim(),nombre:$("#pp_n").value.trim(),rubro:$("#pp_r").value,unidad:$("#pp_u").value.trim()||"u",precio:num($("#pp_pr").value),moneda:$("#pp_m").value,proveedor:$("#pp_p").value.trim(),act:hoy().slice(0,7)};
+      const k=L.findIndex(x=>x.id===d.id);if(k>=0)L[k]=d;else L.push(d);if(await guardarLista(L)){closeSheet();toast("Guardado");render()}};
+    if($("#pp_del"))$("#pp_del").onclick=async()=>{if(!confirm("¿Borrar "+it.nombre+"?"))return;if(await guardarLista(lista().filter(x=>x.id!==it.id))){closeSheet();render()}};
+  })}
+function openPegar(){openSheet(`<div style="display:flex;flex-direction:column;gap:12px">${sheetHead("Pegar lista de un proveedor")}
+    <p class="note" style="margin:0">Copiá las filas desde Excel o el PDF del proveedor y pegalas acá. Una fila por producto, columnas en este orden (separadas por tabulación o “;”): <b>Código · Nombre · Unidad · Precio</b>. Si un producto ya existe (mismo código o nombre), se actualiza el precio.</p>
+    <div class="two"><label class="f">Proveedor<input id="pg_p"></label><label class="f">Rubro<select id="pg_r">${RUBROS_P.map(r=>`<option>${esc(r)}</option>`).join("")}</select></label>
+    <label class="f">Moneda<select id="pg_m"><option value="ARS">Pesos</option><option value="USD">Dólares</option></select></label></div>
+    <textarea id="pg_t" rows="8" placeholder="PCE 10;Panel EPS 10 cm;m²;13,17"></textarea>
+    <div id="pg_prev" class="note"></div><button class="btn pri" id="pg_ok">Cargar</button></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    const parse=()=>$("#pg_t").value.split(/\r?\n/).map(l=>l.split(/\t|;/).map(x=>x.trim())).filter(c=>c.length>=2&&c.some(Boolean)).map(c=>{
+      let [cod,nom,uni,pr]=c;if(c.length===2){nom=c[0];pr=c[1];cod="";uni="u"}if(c.length===3){nom=c[0];uni=c[1];pr=c[2];cod=""}
+      return {codigo:cod||"",nombre:nom||cod,unidad:uni||"u",precio:num(String(pr||"").replace(/[^\d.,-]/g,""))}}).filter(x=>x.nombre);
+    $("#pg_t").oninput=()=>{const r=parse();$("#pg_prev").textContent=r.length?`${r.length} productos detectados. Ej: ${r[0].nombre} – ${r[0].precio}`:""};
+    $("#pg_ok").onclick=async()=>{const r=parse();if(!r.length)return toast("No detecté productos");const L=[...lista()],prov=$("#pg_p").value.trim(),rub=$("#pg_r").value,mon=$("#pg_m").value;let n=0,u=0;
+      for(const x of r){const k=L.findIndex(i=>(x.codigo&&i.codigo===x.codigo)||(i.nombre||"").toLowerCase()===x.nombre.toLowerCase());
+        const d={...(k>=0?L[k]:{id:"p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),rubro:rub}),codigo:x.codigo||(k>=0?L[k].codigo:""),nombre:x.nombre,unidad:x.unidad,precio:x.precio,moneda:mon,proveedor:prov||(k>=0?L[k].proveedor:""),act:hoy().slice(0,7)};
+        if(k>=0){L[k]=d;u++}else{L.push(d);n++}}
+      if(await guardarLista(L)){closeSheet();toast(`Listo: ${n} nuevos, ${u} actualizados`);render()}};
+  })}
+/* calculadora de pared de panel */
+function vPared(){const c=S.par||(S.par={largo:"",alto:"2.6",abN:"",abM2:"",esq:"2",caras:"2",esp:"3",panel:"pce10",desp:"5"});const P=lista().filter(i=>i.rubro==="Paneles");
+  return `<p class="note" style="margin:0">Poné las medidas y elegí la placa: calcula placas, mallas, cemento, arena y mano de obra con tus precios.</p>
+  <section class="card" style="display:flex;flex-direction:column;gap:10px"><div class="two">
+    <label class="f">Largo de pared (m)<input data-par="largo" inputmode="decimal" value="${esc(c.largo)}" placeholder="Ej: 20"></label>
+    <label class="f">Alto (m)<input data-par="alto" inputmode="decimal" value="${esc(c.alto)}"></label>
+    <label class="f">¿Qué placa?<select data-par="panel">${P.map(i=>`<option value="${esc(i.id)}" ${c.panel===i.id?"selected":""}>${esc(i.nombre)}${i.codigo?" ("+esc(i.codigo)+")":""}</option>`).join("")}</select></label>
+    <label class="f">Esquinas<input data-par="esq" inputmode="numeric" value="${esc(c.esq)}"></label>
+    <label class="f">Aberturas (cantidad)<input data-par="abN" inputmode="numeric" value="${esc(c.abN)}" placeholder="0"></label>
+    <label class="f">m² de aberturas en total<input data-par="abM2" inputmode="decimal" value="${esc(c.abM2)}" placeholder="0"></label>
+    <label class="f">Caras con revoque<select data-par="caras"><option value="2" ${c.caras==="2"?"selected":""}>Las dos</option><option value="1" ${c.caras==="1"?"selected":""}>Una</option><option value="0" ${c.caras==="0"?"selected":""}>Ninguna</option></select></label>
+    <label class="f">Espesor de revoque por cara (cm)<input data-par="esp" inputmode="decimal" value="${esc(c.esp)}"></label>
+  </div></section>
+  <section class="card" id="par_res">${paredHtml()}</section>
+  <div class="row"><button class="btn pri" id="par_pres">Pasar a un presupuesto</button><button class="btn" id="par_copy">Copiar</button></div>`}
+function paredCalc(){const c=S.par,L=lista(),by=id=>L.find(i=>i.id===id)||L.find(i=>(i.codigo||"").replace(/\s/g,"").toLowerCase()===String(id).toLowerCase())||null;
+  const largo=num(c.largo),alto=num(c.alto),abN=num(c.abN),abM2=num(c.abM2),esq=num(c.esq),caras=+c.caras||0,esp=num(c.esp),desp=num(c.desp)||5;
+  if(!largo||!alto)return null;
+  const panel=by(c.panel)||L.find(i=>i.rubro==="Paneles");const espP=+(String(panel&&panel.codigo||"").match(/\d+/)||[10])[0];
+  const m2=Math.max(0,largo*alto-abM2),m2P=Math.ceil(m2*(1+desp/100)*10)/10,placas=Math.ceil(largo/1.2);
+  const piezaAlto=Math.ceil(alto/1.23);
+  const perim=abN&&abM2?abN*4*Math.sqrt(abM2/abN):0;
+  const vol=m2*caras*esp/100*1.1;
+  const rows=[];const add=(prod,d,cant,unid,nota)=>{if(cant>0)rows.push({prod,d,cant:Math.ceil(cant*100)/100,unid,nota,precio:prod?precioARS(prod):0})};
+  add(panel,panel?panel.nombre:"Panel EPS",m2P,"m²",`${placas} placas de 1,20 m × ${alto} m · ${fmtN(m2)} m² netos + ${desp}% desperdicio`);
+  add(by("mac15"),"Malla angular (esquinas)",esq*2*piezaAlto,"u",`${esq} esquinas × 2 caras × ${piezaAlto} tramos de 1,23 m`);
+  add(by("mpc30"),"Malla plana (refuerzo de aberturas)",abN*4*2,"u",`${abN} aberturas × 4 diagonales × 2 caras`);
+  add(by(espP>12?"muc1418":"muc0812"),"Malla U (bordes de aberturas)",Math.ceil(perim/1.23),"u",perim?`≈ ${fmtN(perim)} m de bordes`:"");
+  if(vol>0){add(by("cemento"),"Cemento portland 50 kg",Math.ceil(vol*(num(S.cfg.mortCem)||8.5)),"bolsa",`${fmtN(vol)} m³ de mortero 1:3 (${caras} cara/s × ${esp} cm, +10%)`);
+    add(by("arena"),"Arena gruesa",Math.ceil(vol*(num(S.cfg.mortArena)||1.1)*10)/10,"m³","")}
+  const r=S.cfg.rend||{pared:10,revoque:12},jp=Math.ceil(m2/(r.pared||10)*2)/2,jr=caras?Math.ceil(m2*caras/(r.revoque||12)*2)/2:0;
+  const mo=[];if(jp)mo.push({d:"Levantar pared de panel",cant:jp,unid:"jornales",precio:precioJ(),jor:jp,nota:`${fmtN(m2)} m² ÷ ${r.pared} m²/jornal`});
+  if(jr)mo.push({d:"Revoque",cant:jr,unid:"jornales",precio:precioJ(),jor:jr,nota:`${fmtN(m2*caras)} m² ÷ ${r.revoque} m²/jornal`});
+  return {rows,mo,m2}}
+const fmtN=n=>(Math.round(n*100)/100).toLocaleString("es-AR");
+function paredHtml(){const R=paredCalc();if(!R)return `<div class="empty">Poné el largo y el alto de la pared.</div>`;
+  const tm=R.rows.reduce((a,x)=>a+x.cant*x.precio,0),tl=R.mo.reduce((a,x)=>a+x.cant*x.precio,0),falta=R.rows.filter(x=>!x.precio);
+  return `<h3 style="margin-bottom:6px">Materiales · ${fmtN(R.m2)} m² de pared</h3><table><tbody>${R.rows.map(x=>`<tr><td>${esc(x.d)}<br><span class="note">${esc(x.nota||"")}</span></td><td style="white-space:nowrap">${fmtN(x.cant)} ${esc(x.unid)}</td><td style="white-space:nowrap">${x.precio?fmt(x.cant*x.precio):`<span class="pill p-warn">sin precio</span>`}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="2">Materiales</td><td>${fmt(tm)}</td></tr></tfoot></table>
+  <h3 style="margin:10px 0 6px">Mano de obra</h3><table><tbody>${R.mo.map(x=>`<tr><td>${esc(x.d)}<br><span class="note">${esc(x.nota)}</span></td><td>${fmtN(x.cant)} jornales</td><td>${fmt(x.cant*x.precio)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="2">Total pared</td><td>${fmt(tm+tl)}</td></tr></tfoot></table>
+  ${falta.length?`<p class="note" style="margin:8px 0 0;color:var(--warn)">Falta el precio de: ${falta.map(x=>esc(x.d)).join(", ")}. Cargalo en “Lista de precios”.</p>`:""}
+  ${ganInterna(R.mo.reduce((a,x)=>a+x.jor,0))}
+  <p class="note" style="margin:8px 0 0">Mallas y mortero según criterio general de panel EPS: revisalos con el encargado para cada obra.</p>`}
+function bindPrecios(V){
+  V.querySelectorAll("[data-ptab]").forEach(b=>b.onclick=()=>{S.filt.ptab=b.dataset.ptab;render()});
+  const q=V.querySelector("#li_q");if(q)q.oninput=()=>{S.filt.liq=q.value;$("#li_list").innerHTML=listaItemsHtml();bindProd(V)};
+  const r=V.querySelector("#li_r");if(r)r.onchange=()=>{S.filt.lir=r.value;$("#li_list").innerHTML=listaItemsHtml();bindProd(V)};
+  bindProd(V);
+  const n=V.querySelector("#li_new");if(n)n.onclick=()=>openProd();
+  const pg=V.querySelector("#li_paste");if(pg)pg.onclick=()=>openPegar();
+  const cs=V.querySelector("#li_csv");if(cs)cs.onclick=()=>saveFile("lista-de-precios.csv",[["Código","Nombre","Rubro","Unidad","Precio","Moneda","Precio en pesos","Proveedor","Actualizado"],...listaFiltrada().map(i=>[i.codigo,i.nombre,i.rubro,i.unidad,i.precio,i.moneda,Math.round(precioARS(i)),i.proveedor,i.act])]);
+  V.querySelectorAll("[data-par]").forEach(i=>i.oninput=i.onchange=()=>{S.par[i.dataset.par]=i.value;$("#par_res").innerHTML=paredHtml()});
+  const pp=V.querySelector("#par_pres");if(pp)pp.onclick=()=>{const R=paredCalc();if(!R)return toast("Poné el largo y el alto");
+    openPres(null,[...R.rows.map(x=>({d:x.d,cant:x.cant,unid:x.unid,precio:Math.round(x.precio*100)/100})),...R.mo.map(x=>({d:x.d,cant:x.cant,unid:"jornales",precio:x.precio,jor:x.jor}))])};
+  const pc=V.querySelector("#par_copy");if(pc)pc.onclick=()=>{const R=paredCalc();if(!R)return;
+    const t=`Pared ${S.par.largo} m × ${S.par.alto} m (${fmtN(R.m2)} m²)\n`+[...R.rows,...R.mo].map(x=>`• ${x.d}: ${fmtN(x.cant)} ${x.unid}${x.precio?" – "+fmt(x.cant*x.precio):""}`).join("\n");
+    navigator.clipboard.writeText(t).then(()=>toast("Copiado"))};
+}
+function bindProd(V){V.querySelectorAll("[data-prod]").forEach(b=>b.onclick=()=>openProd(lista().find(x=>x.id===b.dataset.prod)))}
