@@ -68,7 +68,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 11:05 ✓";
+const VERSION="19/11 11:20";
 const VIEWS=["portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1094,7 +1094,7 @@ function importBanner(){
     <button class="btn sm" type="button" data-adm="cfg">Precios, jornal y saldos</button>
     <button class="btn sm" type="button" data-adm="backup">Copia de seguridad</button>
     <button class="btn sm" type="button" data-go="empresa">Empresa: gastos, herramientas y vehículos</button></div></section>`;
-  if(S.imp===undefined||(S.imp&&S.imp.done))return adm;
+  if(S.imp===undefined||(S.imp&&S.imp.done))return "";
   return `<div class="card" style="border-color:var(--gold);display:flex;flex-direction:column;gap:8px"><b>Datos listos para pasar</b>
     <p class="note" style="margin:0">Obras, movimientos y jornales que estaban en la app de Claude (Colegio Las Tejas, Santa Rosa, Emilia VGB, Villa María Eleven y el resto de las obras). Tocá el botón y elegí el archivo <b>datos.json</b> que te pasó Claude. Se hace una sola vez.</p>
     <div><button class="btn pri" id="impBtn">Pasar datos ahora</button></div></div>`;
@@ -1697,17 +1697,22 @@ function pintarMenu(){
   const d=$("#drawer"),v=cur();
   d.innerHTML=`<div class="dh"><b>${esc(S.perfil?.nombre||"Menú")}</b><button type="button" class="btn sm" id="menuClose" aria-label="Cerrar menú">✕</button></div>
   ${menuItems().map(([g,its])=>`<div class="grp">${esc(g)}</div>${its.map(([k,ic,t])=>`<a href="#${k}" ${k===v?'aria-current="page"':""}><span class="ic" aria-hidden="true">${ic}</span>${esc(t)}</a>`).join("")}`).join("")}
-  ${isEnc()?"":`<div class="grp">Administración</div>
-    <button type="button" class="it" data-madm="pagorem"><span class="ic" aria-hidden="true">📄</span>Pago con remito</button>
-    <button type="button" class="it" data-madm="users"><span class="ic" aria-hidden="true">👥</span>Usuarios y contraseñas</button>
-    <button type="button" class="it" data-madm="cfg"><span class="ic" aria-hidden="true">⚙️</span>Ajustes: precios, jornal y saldos</button>
-    <button type="button" class="it" data-madm="pack"><span class="ic" aria-hidden="true">📥</span>Importar datos (.json)</button>
-    <button type="button" class="it" data-madm="backup"><span class="ic" aria-hidden="true">💾</span>Copia de seguridad</button>`}
+  ${isEnc()?"":`<div class="grp">Cargar nuevo</div>
+    <button type="button" class="it" data-adm="pagorem"><span class="ic" aria-hidden="true">📄</span>Pago con remito</button>
+    <button type="button" class="it" data-adm="newenc"><span class="ic" aria-hidden="true">🦺</span>Encargado</button>
+    <button type="button" class="it" data-adm="newobra"><span class="ic" aria-hidden="true">🏗️</span>Obra</button>
+    <button type="button" class="it" data-adm="newcli"><span class="ic" aria-hidden="true">🤝</span>Cliente</button>
+    <button type="button" class="it" data-adm="newprov"><span class="ic" aria-hidden="true">🚚</span>Proveedor</button>
+    <button type="button" class="it" data-adm="newherr"><span class="ic" aria-hidden="true">🛠️</span>Herramienta</button>
+  <div class="grp">Administración</div>
+    <button type="button" class="it" data-adm="users"><span class="ic" aria-hidden="true">👥</span>Usuarios y contraseñas</button>
+    <button type="button" class="it" data-adm="cfg"><span class="ic" aria-hidden="true">⚙️</span>Ajustes: precios, jornal y saldos</button>
+    <button type="button" class="it" data-adm="pack"><span class="ic" aria-hidden="true">📥</span>Importar datos (.json)</button>
+    <button type="button" class="it" data-adm="backup"><span class="ic" aria-hidden="true">💾</span>Copia de seguridad</button>`}
   <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button><div class="grp" style="text-transform:none">Versión ${VERSION}</div>`;
   $("#menuClose").onclick=cerrarMenu;
   d.querySelectorAll("a").forEach(a=>a.onclick=()=>setTimeout(cerrarMenu,0));
-  d.querySelectorAll("[data-madm]").forEach(b=>b.onclick=()=>{cerrarMenu();const k=b.dataset.madm;
-    if(k==="pagorem")openMov(null,{tipo:"egreso",conRemito:true});else if(k==="users")openUsers();else if(k==="cfg")openCfg();else if(k==="pack")runPack();else if(k==="backup")copiaSeguridad()});
+  d.querySelectorAll("[data-adm]").forEach(b=>b.addEventListener("click",()=>cerrarMenu()));
   $("#menuOut").onclick=async()=>{await sb.auth.signOut();location.hash="";location.reload()};
 }
 function abrirMenu(){pintarMenu();const d=$("#drawer");d.hidden=false;$("#drawerBg").hidden=false;requestAnimationFrame(()=>d.classList.add("open"));$("#menuBtn").setAttribute("aria-expanded","true");setTimeout(()=>{const a=d.querySelector('[aria-current="page"]')||d.querySelector("a");a&&a.focus()},60)}
