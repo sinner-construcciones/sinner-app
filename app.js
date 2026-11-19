@@ -1481,7 +1481,7 @@ setInterval(async()=>{if(S.auth==="in"&&Date.now()-ultimaActividad>INACTIVIDAD_M
 async function copiaSeguridad(){
   if(!isAdmin())return;
   const out={app:"Sinner Construcciones",fecha:new Date().toISOString(),tablas:{}};
-  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error)throw error;all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
+  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error){if(from===0&&t==="cierres"){all=null;break}throw error}all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:"application/json"}));a.download=`sinner_copia_${hoy()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
     toast("Copia descargada. Guardala en un lugar privado.");
   }catch(e){toast("No se pudo armar la copia")}
