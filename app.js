@@ -85,7 +85,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 21:40";
+const VERSION="19/11 22:00";
 const VIEWS=["usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1822,7 +1822,8 @@ function saldoCajaHasta(c,hasta){return saldos(c,hasta).ars}
 function movDia(c,f){let ent=0,sal=0,n=0;for(const m of S.movs){if(m.fecha!==f)continue;const [x]=efecto(m,c);
     if(m.caja===c||m.cajaDestino===c)n++;if(x>0)ent+=x;else sal-=x}
   return {ent,sal,n}}
-function datosCierre(c,f){const ap=saldoCajaHasta(c,diaAnterior(f)),{ent,sal,n}=movDia(c,f);return {apertura:ap,entradas:ent,salidas:sal,ent,sal,teorico:ap+ent-sal,cant:n}}
+function datosCierre(c,f){const ap=saldoCajaHasta(c,diaAnterior(f)),{ent,sal,n}=movDia(c,f);const ua=saldos(c,diaAnterior(f)).usd,ut=saldos(c,f).usd;
+  return {apertura:ap,entradas:ent,salidas:sal,ent,sal,teorico:ap+ent-sal,cant:n,aperturaUsd:ua,teoricoUsd:ut,conUsd:!!(ua||ut)}}
 function vCierre(){
   const enc=isEnc(),f=S.filt.cierreF||hoy();
   const cajas=enc?[S.perfil?.caja].filter(Boolean):CAJAS.filter(c=>c!=="General"||S.movs.some(m=>m.caja==="General"||m.cajaDestino==="General"));
@@ -1830,7 +1831,7 @@ function vCierre(){
   const hist=[...S.cierres].filter(x=>!enc||x.caja===S.perfil?.caja).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(a.caja||"").localeCompare(b.caja||"")).slice(0,40);
   return `<div class="row between"><h2>Apertura y cierre de cajas</h2></div>
   <div class="row" style="align-items:flex-end;gap:10px"><label class="f">Día<input type="date" id="ci_f" value="${esc(f)}" max="${hoy()}"></label>
-    <button class="btn sm" id="ci_hoy">Hoy</button>${enc?"":`<button class="btn sm" id="ci_wa">Copiar resumen del día</button>`}</div>
+    <button class="btn sm" id="ci_hoy">Hoy</button>${enc?"":`<button class="btn sm" id="ci_wsp" style="background:#25D366;color:#fff;border-color:#25D366">Enviar por WhatsApp</button><button class="btn sm" id="ci_wa">Copiar resumen</button>`}</div>
   <p class="note" style="margin:0">Apertura = saldo con el que arrancó la caja ese día. Contá la plata que hay realmente y ponela en “Contado”: la app calcula la diferencia. Si hay diferencia, podés registrarla como ajuste para que el saldo quede igual a la realidad.</p>
   ${tablaCierre(cajas,f,false)}
   ${enc?"":resumenDiaHtml(f)}
@@ -1845,11 +1846,15 @@ function tablaCierre(cajas,f,soloVer){
         <tr><td>Entradas${d.cant?` <span class="note">(${d.cant} mov.)</span>`:""}</td><td style="color:var(--good)">${d.ent?"+ "+fmt(d.ent):"—"}</td></tr>
         <tr><td>Salidas</td><td>${d.sal?"− "+fmt(d.sal):"—"}</td></tr></tbody>
         <tfoot><tr><td>Debería haber</td><td>${fmt(d.teorico)}</td></tr></tfoot></table>
-      <label class="f">Contado (lo que hay de verdad)<input data-cont inputmode="decimal" value="${ya?ya.contado:""}" placeholder="${Math.round(d.teorico)}" ${soloVer?"disabled":""}></label>
+      <label class="f">Pesos contados (lo que hay de verdad)<input data-cont inputmode="decimal" value="${ya?ya.contado:((S.ciDraft||{})[c+f]||{}).a||""}" placeholder="${Math.round(d.teorico)}" ${soloVer?"disabled":""}></label>
+      ${d.conUsd||ya?.contadoUsd!=null&&ya?.teoricoUsd?`<div class="row between note" style="margin:0"><span>Dólares: apertura ${fmtU(d.aperturaUsd)}</span><b>Debería haber ${fmtU(d.teoricoUsd)}</b></div>
+      <label class="f">Dólares contados<input data-contu inputmode="decimal" value="${ya&&ya.contadoUsd!=null?ya.contadoUsd:((S.ciDraft||{})[c+f]||{}).u||""}" placeholder="${d.teoricoUsd}" ${soloVer?"disabled":""}></label>
+      <span data-difu>${ya&&ya.contadoUsd!=null?difUsdHtml(ya.contadoUsd-d.teoricoUsd):""}</span>`:""}
       <div class="row between"><span data-dif>${ya?difHtml(ya.contado-d.teorico):""}</span>${soloVer?"":`<button class="btn sm ${ya?"":"pri"}" data-cerrar>${ya?"Actualizar cierre":"Cerrar caja"}</button>`}</div>
     </section>`}).join("")}</div>
   ${soloVer||cajas.length<2?"":`<div class="row between"><span class="note">Las cajas sin “Contado” se cierran con lo que debería haber.</span><button class="btn pri" id="ci_todas">Cerrar todas las cajas</button></div>`}`;
 }
+const difUsdHtml=d=>Math.abs(d)<1?`<span style="color:var(--good)">Dólares OK</span>`:`<b style="color:var(--bad)">Dólares: ${d>0?"+ sobran ":"− faltan "}${fmtU(Math.abs(d))}</b>`;
 const difHtml=d=>Math.abs(d)<1?`<span style="color:var(--good)">OK</span>`:`<b style="color:var(--bad)">${d>0?"+ sobra ":"− falta "}${fmt(Math.abs(d))}</b>`;
 function resumenDia(f){const mv=S.movs.filter(m=>m.fecha===f);const eg=mv.filter(m=>m.tipo==="egreso"),ing=mv.filter(m=>m.tipo==="ingreso"&&!/cambio/i.test(m.categoria||""));
   const porObra={};for(const m of eg){const k=obraNombre(m.obra);porObra[k]=(porObra[k]||0)+(+m.monto||0)}
@@ -1862,33 +1867,51 @@ function resumenDiaHtml(f){const r=resumenDia(f);
   ${Object.keys(r.porObra).length?`<table style="margin-top:8px"><tbody>${Object.entries(r.porObra).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>Gastos ${esc(k)}</td><td>${fmt(v)}</td></tr>`).join("")}</tbody></table>`:""}
   ${r.sinBit.length?`<p class="note" style="margin:8px 0 0">Falta la bitácora de: <b>${r.sinBit.map(o=>esc(o.nombre)).join(", ")}</b></p>`:`<p class="note" style="margin:8px 0 0">Bitácora completa ✅</p>`}</section>`}
 function textoResumen(f){const r=resumenDia(f),cajas=CAJAS.filter(c=>c!=="General"||S.movs.some(m=>m.caja==="General"||m.cajaDestino==="General"));
-  let t=`*CIERRE DEL DÍA ${fdate(f)} – Sinner Construcciones*\n\n`;
+  const dias=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"],dd=new Date(f+"T12:00:00");
+  let t=`*Cierre de cajas – ${dias[dd.getDay()]} ${f.slice(8,10)}/${f.slice(5,7)}*\n`;
   for(const c of cajas){const d=datosCierre(c,f),ya=S.cierres.find(x=>x.caja===c&&x.fecha===f);
-    t+=`• Caja ${c}: apertura ${fmt(d.apertura)} | +${fmt(d.ent)} | −${fmt(d.sal)} | cierre ${fmt(d.teorico)}${ya?` | contado ${fmt(ya.contado)}${Math.abs(ya.contado-d.teorico)>=1?` (${ya.contado>d.teorico?"sobra":"falta"} ${fmt(Math.abs(ya.contado-d.teorico))})`:" ✅"}`:" | sin cerrar"}\n`}
-  t+=`\nEntró: ${fmt(r.ing)} · Salió: ${fmt(r.eg)} · Jornales: ${r.jc}\n`;
+    const cambios=S.movs.filter(m=>m.fecha===f&&m.tipo==="cambio"&&m.caja===c);
+    let line=`${c}: ${fmt(ya?ya.contado:d.teorico)}`;if(d.conUsd||ya?.contadoUsd)line+=` · ${fmtU(ya&&ya.contadoUsd!=null?ya.contadoUsd:d.teoricoUsd)}`;
+    if(!ya)line+=" (sin cerrar)";else{const dp=ya.contado-d.teorico,du=ya.contadoUsd!=null?ya.contadoUsd-d.teoricoUsd:0;
+      line+=Math.abs(dp)<1&&Math.abs(du)<1?" ✅":` ⚠️${Math.abs(dp)>=1?` ${dp>0?"sobran":"faltan"} ${fmt(Math.abs(dp))}`:""}${Math.abs(du)>=1?` ${du>0?"sobran":"faltan"} ${fmtU(Math.abs(du))}`:""}`}
+    if(ya&&(Math.abs(+ya.diferencia||0)>=1||Math.abs(+ya.diferenciaUsd||0)>=1)&&Math.abs(ya.contado-d.teorico)<1)line+=` (se ajustó: ${[Math.abs(+ya.diferencia||0)>=1?`${ya.diferencia>0?"sobraban":"faltaban"} ${fmt(Math.abs(ya.diferencia))}`:"",Math.abs(+ya.diferenciaUsd||0)>=1?`${ya.diferenciaUsd>0?"sobraban":"faltaban"} ${fmtU(Math.abs(ya.diferenciaUsd))}`:""].filter(Boolean).join(" y ")})`;
+    if(cambios.length)line+=` (cambió ${cambios.map(m=>`${fmtU(m.usd)} a ${fmt(+m.monto/(+m.usd))}`).join(", ")})`;
+    t+=line+"\n"}
+  const nMov=S.movs.filter(m=>m.fecha===f).length;
+  t+=`\nMovimientos del día: ${nMov} · Entradas ${fmt(r.ing)} · Salidas ${fmt(r.eg)}${r.jc?` · Jornales ${r.jc}`:""}\n`;
   for(const [k,v] of Object.entries(r.porObra))t+=`  - ${k}: ${fmt(v)}\n`;
   if(r.sinBit.length)t+=`\nFalta bitácora: ${r.sinBit.map(o=>o.nombre).join(", ")}\n`;
   return t}
-async function guardarCierre(c,f,contadoTxt,preguntar){
+async function guardarCierre(c,f,contadoTxt,preguntar,contUsdTxt){
   const d=datosCierre(c,f),cont=contadoTxt===""?d.teorico:num(contadoTxt),dif=Math.round((cont-d.teorico)*100)/100;
+  const contU=contUsdTxt==null||contUsdTxt===""?d.teoricoUsd:num(contUsdTxt),difU=m2(contU-d.teoricoUsd);
   const prev=S.cierres.find(x=>x.caja===c&&x.fecha===f);let ajusteMovId=prev&&prev.ajusteMovId||"";
   if(Math.abs(dif)>=1&&preguntar){
     if(confirm(`Caja ${c}: ${dif>0?"sobran":"faltan"} ${fmt(Math.abs(dif))}.\n\n¿Registro un ajuste "Diferencia de caja" para que el saldo de la app quede igual a lo contado?\n\n(Aceptar = sí, registrar ajuste · Cancelar = cerrar igual sin ajuste)`)){
       const ref=db.collection("movimientos").doc(ajusteMovId||undefined);
       await ref.set({fecha:f,tipo:dif>0?"ingreso":"egreso",caja:c,obra:"_empresa",categoria:"Diferencia de caja",monto:Math.abs(dif),detalle:`Diferencia de caja al cierre del ${fdate(f)} (${dif>0?"sobrante":"faltante"})`,creado:Date.now()});
       ajusteMovId=ref.id}}
+  let ajusteUsdId=prev&&prev.ajusteUsdId||"";
+  if(Math.abs(difU)>=1&&preguntar){
+    if(confirm(`Caja ${c}: ${difU>0?"sobran":"faltan"} ${fmtU(Math.abs(difU))}.\n\n¿Registro un ajuste en dólares para que la app quede igual a lo contado?`)){
+      const ref=db.collection("movimientos").doc(ajusteUsdId||undefined),r=ultimoCambio(c,f),cot=r?r.cot:num(S.cfg.cotizacion);
+      await ref.set({fecha:f,tipo:difU>0?"ingreso":"egreso",caja:c,obra:"_empresa",categoria:"Diferencia de caja",moneda:"USD",usd:Math.abs(difU),cotizacion:cot,monto:m2(Math.abs(difU)*(cot||0)),detalle:`Diferencia de dólares al cierre del ${fdate(f)} (${difU>0?"sobrante":"faltante"})`,creado:Date.now()});
+      ajusteUsdId=ref.id}}
   const ref=db.collection("cierres").doc(`${c}-${f}`.replace(/[^\w-]/g,"_"));
-  await ref.set({caja:c,fecha:f,apertura:d.apertura,entradas:d.ent,salidas:d.sal,teorico:d.teorico,contado:cont,diferencia:dif,ajusteMovId,cerradoPor:S.perfil?.nombre||"",creado:prev?.creado||Date.now()});
+  await ref.set({caja:c,fecha:f,apertura:d.apertura,entradas:d.ent,salidas:d.sal,teorico:d.teorico,contado:cont,diferencia:dif,ajusteMovId,...(d.conUsd||contU?{aperturaUsd:d.aperturaUsd,teoricoUsd:d.teoricoUsd,contadoUsd:contU,diferenciaUsd:difU,ajusteUsdId}:{}),cerradoPor:S.perfil?.nombre||"",creado:prev?.creado||Date.now()});
 }
 function bindCierre(V){
   const f=S.filt.cierreF||hoy();
   const fi=V.querySelector("#ci_f");if(fi)fi.onchange=()=>{S.filt.cierreF=fi.value||hoy();render()};
   const bh=V.querySelector("#ci_hoy");if(bh)bh.onclick=()=>{S.filt.cierreF=hoy();render()};
-  V.querySelectorAll("[data-ci]").forEach(tr=>{const c=tr.dataset.ci,inp=tr.querySelector("[data-cont]");
-    if(inp)inp.oninput=()=>{const d=datosCierre(c,f);tr.querySelector("[data-dif]").innerHTML=inp.value===""?"":difHtml(num(inp.value)-d.teorico)};
-    const b=tr.querySelector("[data-cerrar]");if(b)b.onclick=async()=>{try{await guardarCierre(c,f,inp.value,true);toast("Caja "+c+" cerrada")}catch(e){toast(errMsg(e))}}});
-  const bt=V.querySelector("#ci_todas");if(bt)bt.onclick=async()=>{try{for(const tr of V.querySelectorAll("[data-ci]"))await guardarCierre(tr.dataset.ci,f,tr.querySelector("[data-cont]").value,true);toast("Cajas cerradas")}catch(e){toast(errMsg(e))}};
+  V.querySelectorAll("[data-ci]").forEach(tr=>{const c=tr.dataset.ci,inp=tr.querySelector("[data-cont]"),iu=tr.querySelector("[data-contu]");
+    const dr=()=>{S.ciDraft=S.ciDraft||{};S.ciDraft[c+f]={a:inp?inp.value:"",u:iu?iu.value:""}};
+    if(inp)inp.oninput=()=>{dr();const d=datosCierre(c,f);tr.querySelector("[data-dif]").innerHTML=inp.value===""?"":difHtml(num(inp.value)-d.teorico)};
+    if(iu)iu.oninput=()=>{dr();const d=datosCierre(c,f);tr.querySelector("[data-difu]").innerHTML=iu.value===""?"":difUsdHtml(num(iu.value)-d.teoricoUsd)};
+    const b=tr.querySelector("[data-cerrar]");if(b)b.onclick=async()=>{try{await guardarCierre(c,f,inp.value,true,iu?iu.value:null);toast("Caja "+c+" cerrada")}catch(e){toast(errMsg(e))}}});
+  const bt=V.querySelector("#ci_todas");if(bt)bt.onclick=async()=>{try{for(const tr of V.querySelectorAll("[data-ci]"))await guardarCierre(tr.dataset.ci,f,tr.querySelector("[data-cont]").value,true,tr.querySelector("[data-contu]")?tr.querySelector("[data-contu]").value:null);toast("Cajas cerradas")}catch(e){toast(errMsg(e))}};
   const bw=V.querySelector("#ci_wa");if(bw)bw.onclick=()=>navigator.clipboard.writeText(textoResumen(f)).then(()=>toast("Resumen copiado: pegalo en WhatsApp"));
+  const bz=V.querySelector("#ci_wsp");if(bz)bz.onclick=()=>{const u="https://wa.me/?text="+encodeURIComponent(textoResumen(f));const w=window.open(u,"_blank");if(!w)location.href=u};
 }
 
 
