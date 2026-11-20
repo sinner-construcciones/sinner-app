@@ -85,7 +85,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 21:30";
+const VERSION="19/11 21:40";
 const VIEWS=["usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1162,7 +1162,7 @@ function importBanner(){
 }
 async function runImport(){
   if(S.importing)return;
-  const file=await new Promise(res=>{const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.onchange=()=>res(i.files[0]);i.click()});
+  const file=await new Promise(res=>{const i=document.createElement("input");i.type="file";i.style.display="none";document.body.appendChild(i);i.onchange=()=>{res(i.files[0]);i.remove()};i.click()});
   if(!file)return;
   let pack;try{pack=JSON.parse(await file.text());if(!Array.isArray(pack.docs))throw 0}catch(e){return toast("Ese archivo no es datos.json")}
   const by={};for(const x of pack.docs){const[t,id]=x.p.split("/");(by[t]=by[t]||[]).push({id,data:x.d})}
@@ -1179,7 +1179,7 @@ async function runImport(){
 async function runPack(){
   if(!isAdmin())return toast("Solo administradores");
   if(S.importing)return;
-  const file=await new Promise(res=>{const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.onchange=()=>res(i.files[0]);i.click()});
+  const file=await new Promise(res=>{const i=document.createElement("input");i.type="file";i.style.display="none";document.body.appendChild(i);i.onchange=()=>{res(i.files[0]);i.remove()};i.click()});
   if(!file)return;
   let pack;try{pack=JSON.parse(await file.text());if(!Array.isArray(pack.docs))throw 0}catch(e){return toast("Ese archivo no es un paquete de datos")}
   const by={},cnt={};
