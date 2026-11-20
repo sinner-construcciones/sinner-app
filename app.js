@@ -17,7 +17,7 @@ const SIN_OBRA = [
 ];
 const CATEGORIAS = ["Pago recibido","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
 const MOTIVOS = ["Lluvia / clima","Demora del hierro","Falta de material","Falta de personal","Espera de definiciones del cliente","Feriado","Problema de equipo","Otro"];
-const DEF_CFG = {cotizacion:0, costoJornal:100000, precioJornal:0, listaPrecios:`Concrehaus Nro. 40 (sep 2026) – precios NETOS en U$S sin IVA, camión completo puesto en Córdoba. Ancho útil del panel 1,20 m.
+const DEF_CFG = {tarjetas:["Bancor Federico"],cotizacion:0, costoJornal:100000, precioJornal:0, listaPrecios:`Concrehaus Nro. 40 (sep 2026) – precios NETOS en U$S sin IVA, camión completo puesto en Córdoba. Ancho útil del panel 1,20 m.
 Paneles EPS (U$S/m²): PCE 04 9,07 · PCE 06 10,53 · PCE 08 11,84 · PCE 10 13,17 · PCE 12 14,80 · PCE 14 16,28 · PCE 16 17,90 · PCE 18 19,97
 Mallas (U$S/unidad): MPC 15 plana 22,5x123 1,18 · MPC 30 plana 30x123 1,69 · MAC 15 angular 18,5x18,5x123 2,11 · MAC 30 angular 30x30x123 3,06 · MUC 08/12 "U" 2,36 · MUC 14/18 "U" 2,64 · MEC 2401 entera 124x240 9,86`, precios:{hormigon:180000, bombaFija:780000, bombaM3:21000, macrofibra:63000}, rend:{pared:10, revoque:12, platea:16}, cajasDesde:"2026-11-01", saldosIniciales:{Lucas:97469.07}, ultimoRecibo:2};
 const S = {movs:[], cierres:[], obras:[], jorn:[], bit:[], pres:[], inv:[], emp:[], liqs:[], cli:[], prov:[], imp:undefined, owner:false, importing:null, auth:"loading", rol:null, perfil:null, authMsg:"", cfg:structuredClone(DEF_CFG), cfgVer:false, loaded:{m:0,o:0,j:0,b:0}, uid:null, filt:{caja:"Todas", mes:hoy().slice(0,7)}, err:null, stale:false};
@@ -45,6 +45,8 @@ function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";cl
 /* pesos y dólares: movimientos con moneda "USD" mueven dólares; "cambio" saca dólares y mete pesos */
 const esUsd=m=>m.moneda==="USD";
 function efecto(m,c){const v=+m.monto||0,u=+m.usd||0;
+  if(m.pago==="tarjeta")return [0,0];
+  if(m.tipo==="pagoTarjeta")return m.caja===c?[-v,0]:[0,0];
   if(m.tipo==="pase"){const sg=(m.cajaDestino===c?1:0)-(m.caja===c?1:0);return esUsd(m)?[0,sg*u]:[sg*v,0]}
   if(m.caja!==c)return [0,0];
   if(m.tipo==="cambio")return [v,-u];
@@ -85,8 +87,8 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="19/11 22:00";
-const VIEWS=["usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
+const VERSION="20/11 11:30";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -113,7 +115,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -180,8 +182,9 @@ function vCaja(){
     const cb=m.tipo==="cambio";
     const t=cb?`Cambio US$ ${fmtN(m.usd)} → pesos`:pase?`Pase ${esc(m.caja)} → ${esc(m.cajaDestino)}`:esc(m.detalle||m.categoria||"Movimiento");
     const s=cb?`${esc(m.caja)} · a ${fmt(m.cotizacion||m.monto/m.usd)} por dólar${m.cotizacionBlue?` (blue ${fmt(m.cotizacionBlue)})`:""}${m.detalle?" · "+esc(m.detalle):""}`:pase?esc(m.detalle||""):`${esc(m.caja)} · ${esc(obraNombre(m.obra))}${m.categoria?" · "+esc(m.categoria):""}${m.usd&&!esUsd(m)?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):"")+(m.lugarCambio?" ("+esc(m.lugarCambio)+")":""):""}`;
-    const montoTxt=cb?`+ ${fmt(m.monto)}<br><span class="note">− ${fmtU(m.usd)}</span>`:esUsd(m)?`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmtU(m.usd)}`:`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmt(m.monto)}`;
-    html+=`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${t}</span><span class="s">${s}</span>
+    const tcTxt=m.pago==="tarjeta"?` · 💳 ${esc(m.tarjeta||"Tarjeta")}${+m.cuotas>1?" en "+m.cuotas+" cuotas":""} (no sale de la caja)`:"";
+    const montoTxt=m.pago==="tarjeta"?`<span class="note">💳 ${fmt(m.monto)}</span>`:cb?`+ ${fmt(m.monto)}<br><span class="note">− ${fmtU(m.usd)}</span>`:esUsd(m)?`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmtU(m.usd)}`:`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmt(m.monto)}`;
+    html+=`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${t}</span><span class="s">${s}${tcTxt}</span>
       <span class="m" style="color:${cb||pase&&cRef==="Todas"?"var(--muted)":sign>0?"var(--good)":"var(--ink)"}">${montoTxt}</span></button>`;
   }
   const enc=isEnc();
@@ -792,6 +795,7 @@ function bindView(v){
   if(v==="presupuestos")bindPrecios(V);
   if(v==="fede")bindFede(V);
   if(v==="usd")bindUsd(V);
+  if(v==="tarjetas")bindTarjetas(V);
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
@@ -870,12 +874,19 @@ async function save(coll,id,data){
 
 /* movimiento */
 function openMov(m,preset){
+  if(m&&m.tipo==="pagoTarjeta"){if(confirm(`${m.detalle||"Pago de tarjeta"}: ${fmt(m.monto)} desde la caja ${m.caja}.\n\n¿Querés borrar este pago?`))db.collection("movimientos").doc(m.id).delete().then(()=>toast("Pago borrado")).catch(e=>toast(errMsg(e)));return}
   if(isEnc()&&!S.perfil?.caja)return toast("Tu usuario no tiene caja asignada. Pedile a administración que te la asigne.");
   const e=!!m; m=m||{fecha:hoy(),tipo:"egreso",caja:isEnc()?S.perfil.caja:(S.filt.caja!=="Todas"?S.filt.caja:"General"),obra:"",categoria:"Materiales",...(preset||{})};
   const legacyUsd=!!m.usd&&!m.moneda&&m.tipo!=="cambio";
-  const st={tipo:m.tipo,enUsd:legacyUsd,mon:esUsd(m)?"USD":"ARS"};
+  const st={tipo:m.tipo,enUsd:legacyUsd,mon:esUsd(m)?"USD":"ARS",pago:m.pago==="tarjeta"?"tarjeta":"caja"};
+  const TARJ=(S.cfg.tarjetas&&S.cfg.tarjetas.length?S.cfg.tarjetas:["Bancor Federico"]);
   openSheet(`<form id="fm" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar movimiento":"Nuevo movimiento")}
     <div class="seg" id="segTipo">${[["egreso","Salida"],["ingreso","Entrada"],["pase","Pase entre cajas"],...(isEnc()?[]:[["cambio","Cambio US$ → $"]])].map(([v,l])=>`<button type="button" data-t="${v}" aria-pressed="${st.tipo===v}">${l}</button>`).join("")}</div>
+    <div class="seg" id="segPago" style="max-width:340px">${[["caja","Pagado con la caja"],["tarjeta","Con tarjeta de crédito"]].map(([v,l])=>`<button type="button" data-pago="${v}" aria-pressed="${st.pago===v}">${l}</button>`).join("")}</div>
+    <div class="two" id="wTarj"><label class="f">Tarjeta<select id="m_tarj">${[...new Set([...TARJ,...(m.tarjeta?[m.tarjeta]:[])])].map(t=>`<option ${m.tarjeta===t?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
+      <label class="f">Cuotas<input id="m_cuotas" inputmode="numeric" value="${m.cuotas||1}"></label>
+      <label class="f">Primer resumen (mes)<input type="month" id="m_mes1" value="${esc(m.mesPrimerResumen||sigMes(hoy().slice(0,7)))}"></label>
+      <p class="note" id="m_cuotaInfo" style="margin:0;align-self:end"></p></div>
     <div class="seg" id="segMon" style="max-width:280px">${[["ARS","En pesos"],["USD","En dólares"]].map(([v,l])=>`<button type="button" data-mon="${v}" aria-pressed="${st.mon===v}">${l}</button>`).join("")}</div>
     <div class="two"><label class="f">Fecha<input type="date" id="m_fecha" value="${esc(m.fecha)}" required></label>
       <label class="f"><span id="lblCaja">Caja</span><select id="m_caja" ${isEnc()?"disabled":""}>${(CAJAS.includes(m.caja)?CAJAS:[m.caja,...CAJAS]).map(c=>`<option ${m.caja===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label></div>
@@ -904,9 +915,13 @@ function openMov(m,preset){
     if($("#m_remb"))$("#m_remb").onclick=()=>emitirRemito(m);
     wireCommon(sh,"movimientos",m.id);
     const upd=()=>{sh.querySelectorAll("#segTipo button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===st.tipo));
+      const tc=st.tipo==="egreso"&&st.pago==="tarjeta"&&!isEnc();if(tc)st.mon="ARS";
+      $("#segPago").style.display=st.tipo==="egreso"&&!isEnc()&&!legacyUsd?"":"none";
+      sh.querySelectorAll("#segPago button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pago===st.pago));
+      $("#wTarj").style.display=tc?"grid":"none";$("#lblCaja").parentElement.style.display=tc?"none":"";cuotaInfo();
       const p=st.tipo==="pase",cb=st.tipo==="cambio",usd=!cb&&st.mon==="USD";
       sh.querySelectorAll("#segMon button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mon===st.mon));
-      $("#segMon").style.display=cb||isEnc()||legacyUsd?"none":"";
+      $("#segMon").style.display=cb||tc||isEnc()||legacyUsd?"none":"";
       $("#wDest").style.display=p?"":"none";if($("#wProv"))$("#wProv").style.display=st.tipo==="egreso"?"":"none";$("#wObra").style.display=p||cb?"none":"flex";$("#lblCaja").textContent=p?"De la caja":"Caja";
       $("#wUsdF").style.display=st.enUsd&&!cb&&!usd?"grid":"none";$("#m_monto").readOnly=false;
       $("#wUsdX").style.display=cb||usd?"":"none";$("#lblUsdX").textContent=cb?"Dólares que cambiaste":"Monto en dólares";
@@ -918,6 +933,9 @@ function openMov(m,preset){
     $("#m_obra").addEventListener("change",()=>{if($("#m_obra").value==="_federico")$("#m_cat").value="Personal Federico";upd()});
     sh.querySelectorAll("#segTipo button").forEach(b=>b.onclick=()=>{st.tipo=b.dataset.t;upd()});
     sh.querySelectorAll("#segMon button").forEach(b=>b.onclick=()=>{st.mon=b.dataset.mon;upd()});
+    sh.querySelectorAll("#segPago button").forEach(b=>b.onclick=()=>{st.pago=b.dataset.pago;upd()});
+    function cuotaInfo(){const el=$("#m_cuotaInfo");if(!el)return;const n=Math.max(1,parseInt($("#m_cuotas").value)||1),t=num($("#m_monto").value);el.textContent=t?`${n} cuota${n>1?"s":""} de ${fmt(t/n)}`:""}
+    $("#m_cuotas").addEventListener("input",cuotaInfo);$("#m_monto").addEventListener("input",cuotaInfo);
     function usdInfo(){const el=$("#m_usdInfo");if(!el)return;const u=num($("#m_usdx").value),pz=num($("#m_monto").value),b=num(S.cfg.cotizacion);
       if(st.tipo==="cambio"){if(u&&pz){const c=pz/u;el.innerHTML=`Te lo tomaron a <b>${fmt(m2(c))}</b> por dólar.${b?` El blue hoy está a ${fmt(b)}: <b style="color:${c<b?"var(--bad)":"var(--good)"}">${c<b?"la cueva se quedó con":"ganaste"} ${fmt(Math.abs(u*(b-c)))}</b>.`:""}`}else el.textContent="Poné cuántos dólares diste y cuántos pesos te dieron: la app calcula a cuánto te lo tomaron.";el.style.display="";return}
       if(st.mon==="USD"&&!legacyUsd){const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);el.style.display="";
@@ -941,6 +959,8 @@ function openMov(m,preset){
       else if(!monto)return toast("Falta el monto");
       const d={fecha:$("#m_fecha").value,tipo:st.tipo,caja:$("#m_caja").value,monto,detalle:$("#m_det").value.trim(),creado:m.creado};
       for(const k of ["reciboNro","remitoNro","remitoA","remitoDoc","remitoForma","remitoItems","origen"])if(m[k]!=null&&m[k]!=="")d[k]=m[k];
+      if(st.tipo==="egreso"&&st.pago==="tarjeta"&&!isEnc()){d.pago="tarjeta";d.tarjeta=$("#m_tarj").value;d.cuotas=Math.max(1,parseInt($("#m_cuotas").value)||1);d.mesPrimerResumen=$("#m_mes1").value||sigMes(d.fecha.slice(0,7));d.caja=duenoTarjeta(d.tarjeta)}
+      else if(e&&m.pago==="tarjeta"){d.pago=null;d.tarjeta=null;d.cuotas=null;d.mesPrimerResumen=null}
       if(usdMode){d.moneda="USD";d.usd=ux;const r=ultimoCambio(d.caja,d.fecha);d.cotizacion=r?r.cot:num(S.cfg.cotizacion);d.cotRef=r?"ultimo cambio":"blue"}
       if(st.tipo==="cambio"){d.usd=ux;d.cotizacion=m2(monto/ux);if(num(S.cfg.cotizacion))d.cotizacionBlue=num(S.cfg.cotizacion);d.categoria="Cambio de dólares";d.obra="_empresa"}
       if(st.tipo==="pase"){d.cajaDestino=$("#m_dest").value;if(d.cajaDestino===d.caja)return toast("Elegí dos cajas distintas")}
@@ -1784,7 +1804,7 @@ function menuItems(){
   if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"]]]];
   return [
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
-    ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
+    ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
     ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Precios y presupuestos"]]],
     ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
 }
@@ -2084,7 +2104,7 @@ function vFede(){
   const desde=S.cfg.cajasDesde||"";const enMes=m=>mes==="todo"?(m.fecha||"")>=desde:(m.fecha||"").startsWith(mes);
   const M=S.movs.filter(enMes);
   const entr=M.filter(m=>(m.tipo==="ingreso"&&m.caja===C)||(m.tipo==="pase"&&m.cajaDestino===C));
-  const sal=M.filter(m=>(m.tipo==="egreso"&&m.caja===C)||(m.tipo==="pase"&&m.caja===C));
+  const sal=M.filter(m=>(m.tipo==="egreso"&&m.caja===C&&m.pago!=="tarjeta")||(m.tipo==="pase"&&m.caja===C)||(m.tipo==="pagoTarjeta"&&m.caja===C));
   const pers=M.filter(esPersonalFede);
   const sum=L=>L.reduce((a,m)=>a+(+m.monto||0),0);
   const gE={},gS={},gP={};
@@ -2132,3 +2152,40 @@ function vUsd(){
     <p class="note" style="margin:6px 0 0">El blue es solo referencia: los pesos salen siempre de lo que dieron en la cueva.</p>`:`<div class="empty">Todavía no hay cambios cargados. Cuando cambien dólares, tocá “+ Cambié dólares”.</div>`}</section>`}
 function bindUsd(V){const s=V.querySelector("#usdMes");if(s)s.onchange=()=>{S.filt.umes=s.value;render()};
   const b=V.querySelector("#usdCambio");if(b)b.onclick=()=>openMov(null,{tipo:"cambio",caja:"Numa"})}
+
+
+/* ---------- tarjetas de crédito: compras en cuotas que no tocan la caja hasta que se paga el resumen ---------- */
+function sigMes(ym,k=1){const [y,mm]=ym.split("-").map(Number);const d=new Date(y,mm-1+k,1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
+const duenoTarjeta=t=>CAJAS.find(c=>(t||"").toLowerCase().includes(c.toLowerCase()))||"General";
+function cuotasDe(m){const n=Math.max(1,+m.cuotas||1),v=(+m.monto||0)/n,m1=m.mesPrimerResumen||sigMes((m.fecha||hoy()).slice(0,7));return Array.from({length:n},(_,i)=>({mes:sigMes(m1,i),monto:v,n:i+1,de:n,m}))}
+function vTarjetas(){
+  if(!isAdmin())return `<div class="empty">Solo administración.</div>`;
+  const TARJ=S.cfg.tarjetas&&S.cfg.tarjetas.length?S.cfg.tarjetas:["Bancor Federico"];
+  const compras=S.movs.filter(m=>m.pago==="tarjeta"),pagos=S.movs.filter(m=>m.tipo==="pagoTarjeta");
+  const mesAct=hoy().slice(0,7);
+  return `<div class="row between"><h2>Tarjetas de crédito</h2><button class="btn sm" id="tjNueva">+ Tarjeta</button></div>
+  <p class="note" style="margin:0">Las compras con tarjeta cuentan como gasto de la obra o la empresa el día de la compra, pero no tocan ninguna caja. La caja baja recién cuando se paga el resumen.</p>
+  ${TARJ.map(t=>{const C=compras.filter(m=>m.tarjeta===t),P=pagos.filter(m=>m.tarjeta===t);
+    const deuda=C.reduce((a,m)=>a+(+m.monto||0),0)-P.reduce((a,m)=>a+(+m.monto||0),0);
+    const porMes={};for(const m of C)for(const q of cuotasDe(m))(porMes[q.mes]=porMes[q.mes]||[]).push(q);
+    const pagoMes=mes=>P.filter(x=>x.mesResumen===mes).reduce((a,x)=>a+(+x.monto||0),0);
+    const meses=Object.keys(porMes).sort().filter(ms=>ms>=sigMes(mesAct,-2));
+    return `<section class="card"><div class="row between"><h3>${esc(t)}</h3><div style="text-align:right"><div class="note">Deuda total</div><b class="${deuda>0?"neg":""}">${fmt(deuda)}</b></div></div>
+      <h4 style="margin:10px 0 4px">Cuotas por resumen</h4>
+      ${meses.length?meses.map(ms=>{const L=porMes[ms],tot=L.reduce((a,q)=>a+q.monto,0),pg=pagoMes(ms);
+        return `<details class="grpd"><summary><span>${esc(mlabel(ms))} <span class="note">(${L.length} cuota${L.length>1?"s":""})</span>${pg?` <span class="pill ${pg+1>=tot?"p-good":"p-warn"}">${pg+1>=tot?"Pagado":"Pagado "+fmt(pg)}</span>`:""}</span><b>${fmt(tot)}</b></summary>
+          <div class="list">${L.map(q=>`<button class="item" data-edit-mov="${esc(q.m.id)}"><span class="t">${esc(q.m.detalle||q.m.categoria||"Compra")}</span><span class="s">Cuota ${q.n} de ${q.de} · compra ${esc(fdate(q.m.fecha))} · ${esc(obraNombre(q.m.obra))}</span><span class="m">${fmt(q.monto)}</span></button>`).join("")}</div>
+          ${pg+1>=tot?"":`<div class="row" style="margin:6px 0 10px"><button class="btn sm pri" data-pagar="${esc(t)}|${ms}|${Math.round((tot-pg)*100)/100}">Pagar resumen de ${esc(mlabel(ms))}</button></div>`}</details>`}).join(""):`<div class="empty">Sin compras con esta tarjeta todavía.</div>`}
+      ${P.length?`<h4 style="margin:10px 0 4px">Pagos de resumen</h4><div class="list">${P.sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).map(x=>`<button class="item" data-edit-mov="${esc(x.id)}"><span class="t">Resumen ${esc(mlabel(x.mesResumen||""))}</span><span class="s">${esc(fdate(x.fecha))} · pagado desde la caja ${esc(x.caja)}</span><span class="m">${fmt(x.monto)}</span></button>`).join("")}</div>`:""}
+    </section>`}).join("")}`}
+function openPagoTarjeta(t,mes,monto){openSheet(`<form id="fpt" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Pagar resumen "+esc(t))}
+    <div class="two"><label class="f">Resumen de<input type="month" id="pt_mes" value="${esc(mes)}"></label><label class="f">Fecha de pago<input type="date" id="pt_f" value="${hoy()}"></label>
+    <label class="f">Monto pagado<input id="pt_m" inputmode="decimal" value="${monto}"></label><label class="f">Sale de la caja<select id="pt_c">${CAJAS.map(c=>`<option ${c===duenoTarjeta(t)?"selected":""}>${c}</option>`).join("")}</select></label></div>
+    <p class="note" style="margin:0">Baja la plata de esa caja. No se suma como gasto otra vez: el gasto ya se contó el día de cada compra.</p>
+    <button class="btn pri" type="submit">Registrar pago</button></form>`,sh=>{sh.querySelector("[data-close]").onclick=closeSheet;
+    $("#fpt").onsubmit=async ev=>{ev.preventDefault();const v=num($("#pt_m").value);if(!v)return toast("Falta el monto");
+      try{await db.collection("movimientos").doc().set({tipo:"pagoTarjeta",tarjeta:t,mesResumen:$("#pt_mes").value,fecha:$("#pt_f").value,caja:$("#pt_c").value,monto:v,detalle:`Pago resumen ${t} ${mlabel($("#pt_mes").value)}`,categoria:"Pago de tarjeta",obra:"_empresa",creado:Date.now()});closeSheet();toast("Pago registrado")}catch(e){toast(errMsg(e))}}})}
+function bindTarjetas(V){V.querySelectorAll("[data-pagar]").forEach(b=>b.onclick=()=>{const [t,ms,mo]=b.dataset.pagar.split("|");openPagoTarjeta(t,ms,mo)});
+  V.querySelectorAll("[data-edit-mov]").forEach(b=>b.onclick=()=>{const m=S.movs.find(x=>x.id===b.dataset.editMov);if(m)openMov(m)});
+  const n=V.querySelector("#tjNueva");if(n)n.onclick=async()=>{const t=(prompt("Nombre de la tarjeta (por ejemplo: Visa Macro Ana)")||"").trim();if(!t)return;
+    const L=[...new Set([...(S.cfg.tarjetas||["Bancor Federico"]),t])];const {id:_i,_por:_p,...resto}=S.cfg;try{await db.doc("config/general").set({...resto,tarjetas:L});toast("Tarjeta agregada")}catch(e){toast(errMsg(e))}}}
