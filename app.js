@@ -1184,8 +1184,10 @@ async function runPack(){
   let pack;try{pack=JSON.parse(await file.text());if(!Array.isArray(pack.docs))throw 0}catch(e){return toast("Ese archivo no es un paquete de datos")}
   const by={},cnt={};
   for(const x of pack.docs){const[t,id]=String(x.p||"").split("/");
-    if(!(t in TABLAS)||t==="config"||!id||!/^[\w-]{1,80}$/.test(id)||!x.d||typeof x.d!=="object")return toast("El archivo tiene datos no válidos ("+String(x.p).slice(0,40)+")");
+    if(!(t in TABLAS)||(t==="config"&&!(id==="general"&&x.d&&x.d.mezclar===true&&Object.keys(x.d).every(k=>["mezclar","inicioCajas"].includes(k))))||!id||!/^[\w-]{1,80}$/.test(id)||!x.d||typeof x.d!=="object")return toast("El archivo tiene datos no válidos ("+String(x.p).slice(0,40)+")");
     (by[t]=by[t]||[]).push({id,data:x.d});cnt[t]=(cnt[t]||0)+1}
+  /* ajustes que se suman a la configuración sin pisar el resto */
+  let cfgMerge=null;if(by.config){const g=by.config.find(r=>r.id==="general"&&r.data.mezclar);if(g){const {mezclar,...x}=g.data;cfgMerge=x}by.config=by.config.filter(r=>!(r.id==="general"&&r.data.mezclar));if(!by.config.length)delete by.config}
   const borrar=[];for(const t of Object.keys(by)){by[t]=by[t].filter(r=>{if(r.data.borrar===true){borrar.push({t,id:r.id,motivo:r.data.motivo||""});return false}return true});if(!by[t].length)delete by[t]}
   /* no pisar lo que ya existe ni duplicar lo que se cargó a mano */
   const kMov=m=>[m.fecha,m.caja,m.tipo,Math.round(+m.monto||0),m.tipo==="pase"?m.cajaDestino:(m.obra||"")].join("|");
@@ -1200,15 +1202,17 @@ async function runPack(){
     return true});total+=by[t].length;if(!by[t].length)delete by[t]}
   const local2={movimientos:S.movs,jornales:S.jorn,bitacora:S.bit,obras:S.obras,empleados:S.emp,sueldos:S.liqs};
   const aBorrar=borrar.filter(b=>(local2[b.t]||[]).some(x=>x.id===b.id));
-  if(!total&&!aBorrar.length)return alert("Todo lo de este archivo ya estaba cargado. No se agregó nada.\n\n"+salteados.slice(0,25).join("\n"));
+  const cfgTxt=cfgMerge?.inicioCajas?"Arranque de cajas: "+Object.entries(cfgMerge.inicioCajas).map(([c,v])=>`${c} desde ${fdate(v.fecha)}: ${fmt(v.ars||0)}${v.usd?" + "+fmtU(v.usd):""}`).join(" · "):"";
+  if(!total&&!aBorrar.length&&!cfgMerge)return alert("Todo lo de este archivo ya estaba cargado. No se agregó nada.\n\n"+salteados.slice(0,25).join("\n"));
   const res=Object.entries(by).map(([t,L])=>L.length+" "+t).join(", ");
-  if(!confirm(`Se van a cargar ${total} registros nuevos${res?" ("+res+")":""}.${aBorrar.length?`\nSe borran ${aBorrar.length} que quedan reemplazados:\n`+aBorrar.map(b=>"• "+b.motivo).join("\n"):""}${salteados.length?`\n\nSe saltean ${salteados.length} porque ya estaban:\n`+salteados.slice(0,15).join("\n")+(salteados.length>15?"\n…":""):""}\n\n¿Seguimos?`))return;
+  if(!confirm(`${cfgTxt?cfgTxt+"\n\n":""}Se van a cargar ${total} registros nuevos${res?" ("+res+")":""}.${aBorrar.length?`\nSe borran ${aBorrar.length} que quedan reemplazados:\n`+aBorrar.map(b=>"• "+b.motivo).join("\n"):""}${salteados.length?`\n\nSe saltean ${salteados.length} porque ya estaban:\n`+salteados.slice(0,15).join("\n")+(salteados.length>15?"\n…":""):""}\n\n¿Seguimos?`))return;
   S.importing={n:0,total};render();
   try{
     for(const [t,rows] of Object.entries(by)){
       for(let i=0;i<rows.length;i+=200){const {error}=await sb.from(t).upsert(rows.slice(i,i+200));if(error)throw error;S.importing.n+=Math.min(200,rows.length-i);render()}
     }
     for(const b of aBorrar){const {error}=await sb.from(b.t).delete().eq("id",b.id);if(error)throw error}
+    if(cfgMerge){const {id:_i,_por:_p,...resto}=S.cfg;const nx={...resto,...cfgMerge};if(cfgMerge.inicioCajas)nx.inicioCajas={...(resto.inicioCajas||{}),...cfgMerge.inicioCajas};await db.doc("config/general").set(nx)}
     S.importing=null;await cargarTodo();toast("Listo: "+total+" registros cargados");render();
   }catch(e){S.importing=null;toast("Se cortó la carga. Probá de nuevo: no se duplica nada.");render()}
 }
