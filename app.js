@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 11:40";
+const VERSION="23/11 12:25";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -908,7 +908,7 @@ function openMov(m,preset){
       <label class="f" id="wComi">Comisión que cobraron<input id="m_comi" inputmode="decimal" placeholder="Ej: 60000 o 3%" value="${esc(m.comision||"")}"></label></div>
     <label class="f" id="wDest">A la caja<select id="m_dest">${CAJAS.map(c=>`<option ${m.cajaDestino===c?"selected":""}>${c}</option>`).join("")}</select></label>
     <label class="row" id="wUsd" style="font-size:14px;font-weight:600;${legacyUsd?"":"display:none"}"><input type="checkbox" id="m_enusd" ${st.enUsd?"checked":""}> Es en dólares (cambiados a pesos)</label>
-    <label class="f" id="wUsdX"><span id="lblUsdX">Monto en dólares</span><input id="m_usdx" inputmode="decimal" value="${esUsd(m)||m.tipo==="cambio"?(m.usd||""):""}" placeholder="US$"></label>
+    <label class="f" id="wUsdX"><span id="lblUsdX">Monto en dólares</span><input id="m_usdx" inputmode="decimal" value="${esUsd(m)||m.tipo==="cambio"||legacyUsd?(m.usd||""):""}" placeholder="US$"></label>
     <p class="note" id="m_usdInfo" style="margin:0"></p>
     <div id="wUsdF" style="display:grid;gap:10px">
       <div class="two"><label class="f">Dólares<input id="m_usd" inputmode="decimal" value="${m.usd||""}"></label>
@@ -948,7 +948,7 @@ function openMov(m,preset){
       $("#wTarj").style.display=tc?"grid":"none";$("#lblCaja").parentElement.style.display=tc?"none":"";cuotaInfo();
       const p=st.tipo==="pase",cb=st.tipo==="cambio"||st.tipo==="mover",usd=!cb&&st.mon==="USD";
       sh.querySelectorAll("#segMon button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mon===st.mon));
-      $("#segMon").style.display=cb||tc||isEnc()||legacyUsd?"none":"";
+      $("#segMon").style.display=cb||tc||isEnc()?"none":"";$("#wUsd").style.display=legacyUsd&&st.mon!=="USD"?"":"none";if(st.mon==="USD")st.enUsd=false;
       $("#wDest").style.display=p?"":"none";if($("#wProv"))$("#wProv").style.display=st.tipo==="egreso"?"":"none";$("#wObra").style.display=p||cb?"none":"flex";$("#lblCaja").textContent=p?"De la caja":"Caja";
       $("#wUsdF").style.display=st.enUsd&&!cb&&!usd?"grid":"none";$("#m_monto").readOnly=false;
       const soloCambio=st.tipo==="cambio";
@@ -968,7 +968,7 @@ function openMov(m,preset){
     function usdInfo(){const el=$("#m_usdInfo");if(!el)return;const u=num($("#m_usdx").value),pz=num($("#m_monto").value),b=num(S.cfg.cotizacion);
       if(st.tipo==="mover"){el.style.display="none";return}
       if(st.tipo==="cambio"){if(u&&pz){const c=pz/u;el.innerHTML=`Se cambió a <b>${fmt(m2(c))}</b> por dólar.`}else el.textContent="Poné cuántos dólares diste y cuántos pesos te dieron: la app calcula a cuánto se cambió.";el.style.display="";return}
-      if(st.mon==="USD"&&!legacyUsd){const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);el.style.display="";
+      if(st.mon==="USD"){const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);el.style.display="";
         el.innerHTML=r?`Sale de los dólares de la caja. Para los números de la obra se toma a ${fmt(r.cot)}, el último cambio real (${esc(fdate(r.fecha))}, caja ${esc(r.caja)})${u?`: ${fmt(u*r.cot)}`:""}.`:`Sale de los dólares de la caja. Todavía no hay ningún cambio cargado: para los números de la obra se toma el blue de hoy hasta que cambien.`;return}
       el.style.display="none"}
     $("#m_usdx").addEventListener("input",usdInfo);$("#m_monto").addEventListener("input",usdInfo);$("#m_caja").addEventListener("change",usdInfo);
@@ -982,7 +982,7 @@ function openMov(m,preset){
     const desdePesos=()=>{if(st.enUsd){const u=num($("#m_usd").value),p=num($("#m_monto").value);if(u&&p)$("#m_cot").value=Math.round(p/u*100)/100}info()};
     $("#m_usd").oninput=calc;$("#m_cot").oninput=calc;$("#m_monto").addEventListener("input",desdePesos);upd();info();
     $("#fm").onsubmit=async ev=>{ev.preventDefault();
-      const usdMode=st.tipo!=="cambio"&&st.mon==="USD"&&!legacyUsd&&!isEnc(),ux=num($("#m_usdx").value);
+      const usdMode=!["cambio","mover"].includes(st.tipo)&&st.mon==="USD"&&!isEnc(),ux=num($("#m_usdx").value);
       let monto=num($("#m_monto").value);
       if(usdMode){if(!ux)return toast("Falta el monto en dólares");const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);const cot=r?r.cot:num(S.cfg.cotizacion);monto=m2(ux*(cot||0))}
       else if(st.tipo==="cambio"){if(!ux||!monto)return toast("Completá los dólares y los pesos que te dieron")}
@@ -1003,7 +1003,8 @@ function openMov(m,preset){
       else{d.obra=$("#m_obra").value;d.categoria=$("#m_cat").value;if(!d.obra)return toast("Elegí la obra (o “Sin obra”)");
         if(d.categoria==="Personal Federico"&&d.tipo==="egreso")d.obra="_federico";
         if(d.obra==="_federico"&&d.tipo==="egreso"){d.categoria="Personal Federico";d.rubroPersonal=$("#m_rubp").value}}
-      if(st.enUsd&&legacyUsd){d.usd=num($("#m_usd").value);d.cotizacion=num($("#m_cot").value);
+      if(usdMode&&legacyUsd){d.cotizacion=d.cotizacion;d.lugarCambio=null;d.cotizacionBlue=null}
+      if(st.enUsd&&legacyUsd&&!usdMode){d.usd=num($("#m_usd").value);d.cotizacion=num($("#m_cot").value);
         if(!d.usd||!d.cotizacion)return toast("Completá los dólares y a cuánto los tomaron");
         if(num(S.cfg.cotizacion))d.cotizacionBlue=num(S.cfg.cotizacion)}
       if(st.tipo==="egreso"&&$("#m_prov")&&$("#m_prov").value)d.proveedorId=$("#m_prov").value;
