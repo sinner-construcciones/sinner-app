@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 15:26";
+const VERSION="23/11 15:59";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -239,7 +239,7 @@ function vBitacora(){
   let L=[...S.bit].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   if(ob!=="todas")L=L.filter(b=>b.obra===ob);
   L=L.slice(0,200);
-  return `<h2>Bitácora de obra</h2>
+  return `<div class="row between"><h2>Bitácora de obra</h2>${isEnc()?"":`<button class="btn sm" id="bit_print">🖨️ Imprimir resumen</button>`}</div>
   <p class="note" style="margin:0">Un registro por obra y por día: si se trabajó y, si no, por qué. Sirve para justificar atrasos.</p>
   <div class="chips"><button class="chip" aria-pressed="${ob==="todas"}" data-bobra="todas">Todas</button>${sortObras(S.obras).map(o=>`<button class="chip" aria-pressed="${ob===o.id}" data-bobra="${esc(o.id)}">${esc(o.nombre)}</button>`).join("")}</div>
   ${ob!=="todas"?(()=>{const r=resObra(ob);return `<div class="grid"><div class="card stat"><div class="lbl">Días trabajados</div><div class="num pos">${r.trab}</div></div><div class="card stat"><div class="lbl">Parciales</div><div class="num">${r.parc}</div></div><div class="card stat"><div class="lbl">Días perdidos</div><div class="num neg">${r.perd}</div></div></div>`})():""}
@@ -851,6 +851,7 @@ function bindView(v){
   V.querySelectorAll("[data-encv]").forEach(b=>b.onclick=()=>{S.filt.encv=b.dataset.encv;render()});
   V.querySelectorAll("[data-oh]").forEach(b=>b.onclick=()=>{S.filt.oh=b.dataset.oh;render()});
   V.querySelectorAll("[data-bobra]").forEach(b=>b.onclick=()=>{S.filt.bobra=b.dataset.bobra;render()});
+  const bpr=V.querySelector("#bit_print");if(bpr)bpr.onclick=openResumenBit;
   const ms=$("#mesSel");if(ms)ms.onchange=()=>{S.filt.mes=ms.value;render()};
   const em=$("#expMov");if(em)em.onclick=exportMovs;
   const er=$("#expRes");if(er)er.onclick=exportRes;
@@ -2320,3 +2321,54 @@ async function enviarPlanillaEnc(R){const tot=R.filas.reduce((a,f)=>a+f.saldo,0)
   if(!confirm(`Planilla del ${fdate(R.desde)} al ${fdate(R.hasta)}: ${R.filas.length} personas, total ${fmt(tot)}.\n\n¿La envío a administración para que la revise?`))return;
   try{await db.collection("sueldos").doc("pend-"+Date.now()).set({pendiente:true,desde:R.desde,hasta:R.hasta,filasPdf:R.filas,notas:R.notas,totalPdf:tot,subidaPor:(S.perfil&&S.perfil.nombre)||S.user?.email||"encargado",creado:Date.now()});toast("Planilla enviada a administración")}
   catch(e){alert("No se pudo enviar: "+errMsg(e)+"\n\nAvisale a Tami: falta activar el permiso (SQL 8).")}}
+
+
+/* ---------- bitácora: resumen imprimible (solo administración) ---------- */
+function openResumenBit(){
+  const ob=S.filt.bobra&&S.filt.bobra!=="todas"?S.filt.bobra:"todas",m=hoy().slice(0,7);
+  openSheet(`<div style="display:flex;flex-direction:column;gap:12px">${sheetHead("Imprimir resumen de bitácora")}
+    <label class="f">Obra<select id="rb_o"><option value="todas">Todas (una hoja por obra)</option>${sortObras(S.obras).filter(o=>!o.id.startsWith("_")).map(o=>`<option value="${esc(o.id)}" ${o.id===ob?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></label>
+    <div class="two"><label class="f">Desde<input type="date" id="rb_d" value="${m}-01"></label><label class="f">Hasta<input type="date" id="rb_h" value="${hoy()}"></label></div>
+    <div class="chips"><button class="chip" data-rbq="sem">Esta semana</button><button class="chip" data-rbq="mes">Este mes</button><button class="chip" data-rbq="ant">Mes pasado</button><button class="chip" data-rbq="obra">Toda la obra</button></div>
+    <p class="note" style="margin:0">Cuenta de lunes a sábado. Los días sin nada cargado salen como “sin registro”. Desde la ventana de impresión podés imprimir o guardar como PDF.</p>
+    <button class="btn pri" id="rb_ok">🖨️ Imprimir</button></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    sh.querySelectorAll("[data-rbq]").forEach(b=>b.onclick=()=>{const q=b.dataset.rbq,t=hoy(),d=new Date(t+"T12:00");let a,z=t;
+      if(q==="sem"){const k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);a=d.toISOString().slice(0,10)}
+      else if(q==="mes")a=t.slice(0,8)+"01";
+      else if(q==="ant"){d.setDate(1);d.setMonth(d.getMonth()-1);a=d.toISOString().slice(0,10);const e=new Date(d);e.setMonth(e.getMonth()+1);e.setDate(0);z=e.toISOString().slice(0,10)}
+      else{const o=$("#rb_o").value;const fs=S.bit.filter(b=>o==="todas"||b.obra===o).map(b=>b.fecha).sort();const ob=S.obras.find(x=>x.id===o);a=(ob&&ob.fechaInicio)||fs[0]||t}
+      $("#rb_d").value=a;$("#rb_h").value=z});
+    $("#rb_ok").onclick=()=>{const o=$("#rb_o").value,d=$("#rb_d").value,h=$("#rb_h").value;if(!d||!h||d>h)return toast("Revisá las fechas");
+      const ids=o==="todas"?sortObras(S.obras).filter(x=>!x.id.startsWith("_")&&S.bit.some(b=>b.obra===x.id&&b.fecha>=d&&b.fecha<=h)).map(x=>x.id):[o];
+      if(!ids.length)return toast("No hay registros de bitácora en esas fechas");
+      closeSheet();imprimirHtml(ids.map((id,i)=>hojaBit(id,d,h,i>0)).join(""))}})}
+function hojaBit(obraId,d,h,salto){
+  const o=S.obras.find(x=>x.id===obraId)||{nombre:obraId};const logo=(document.querySelector("img.logo")||{}).src||"";
+  const porDia={};S.bit.filter(b=>b.obra===obraId&&b.fecha>=d&&b.fecha<=h).forEach(b=>{(porDia[b.fecha]=porDia[b.fecha]||[]).push(b)});
+  const jor={};S.jorn.filter(j=>j.obra===obraId&&j.fecha>=d&&j.fecha<=h).forEach(j=>jor[j.fecha]=(jor[j.fecha]||0)+(+j.cantidad||0));
+  const dias=[];for(let x=new Date(d+"T12:00");x.toISOString().slice(0,10)<=h;x.setDate(x.getDate()+1)){const f=x.toISOString().slice(0,10),dom=x.getDay()===0;if(dom&&!porDia[f])continue;dias.push(f)}
+  const c={si:0,parcial:0,no:0,sin:0},mot={};
+  const DN=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const filas=dias.map(f=>{const L=porDia[f]||[];const t=L.length?(L.some(b=>b.trabajo==="si")?"si":L.some(b=>b.trabajo==="parcial")?"parcial":"no"):"sin";c[t]++;
+    L.filter(b=>b.trabajo!=="si"&&b.motivo).forEach(b=>mot[b.motivo]=(mot[b.motivo]||0)+1);
+    const est={si:"✔ Se trabajó",parcial:"◐ Parcial",no:"✖ No se trabajó",sin:"— Sin registro"}[t];
+    const col={si:"#1d7a3a",parcial:"#a86b00",no:"#b3261e",sin:"#888"}[t];
+    const det=L.map(b=>[(b.trabajo!=="si"&&b.motivo)?b.motivo:"",b.detalle||""].filter(Boolean).join(" — ")).filter(Boolean).join(" · ");
+    const jj=jor[f]||L.map(b=>+b.jornales||0).reduce((a,b)=>Math.max(a,b),0)||"";
+    return `<tr><td style="white-space:nowrap">${DN[new Date(f+"T12:00").getDay()]} ${esc(fdate(f))}</td><td style="color:${col};font-weight:600;white-space:nowrap">${est}</td><td>${esc(det)}</td><td style="text-align:center">${jj}</td></tr>`}).join("");
+  const td="border:1px solid #ccc;padding:5px 7px;vertical-align:top;text-align:left";
+  return `<div style="${salto?"page-break-before:always;":""}font:12px/1.4 system-ui,sans-serif;color:#111">
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px">
+    ${logo?`<img src="${logo}" style="height:46px">`:`<b>SINNER CONSTRUCCIONES</b>`}<div style="text-align:right"><div style="font-size:16px;font-weight:700">Bitácora de obra</div><div>${esc(fdate(d))} al ${esc(fdate(h))}</div></div></div>
+  <div style="font-size:15px;font-weight:700">${esc(o.nombre)}</div>${o.cliente?`<div>Cliente: ${esc(o.cliente)}</div>`:""}${o.direccion?`<div>${esc(o.direccion)}</div>`:""}
+  <table style="border-collapse:collapse;margin:10px 0;width:100%"><tr>
+    <td style="${td}">Días trabajados<br><b style="font-size:16px">${c.si}</b></td><td style="${td}">Parciales<br><b style="font-size:16px">${c.parcial}</b></td>
+    <td style="${td}">No se trabajó<br><b style="font-size:16px">${c.no}</b></td><td style="${td}">Sin registro<br><b style="font-size:16px">${c.sin}</b></td><td style="${td}">Días hábiles (lun a sáb)<br><b style="font-size:16px">${dias.length}</b></td></tr></table>
+  ${Object.keys(mot).length?`<div style="margin-bottom:8px"><b>Motivos de días sin trabajo o parciales:</b> ${Object.entries(mot).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)}: ${v} día${v===1?"":"s"}`).join(" · ")}</div>`:""}
+  <table style="border-collapse:collapse;width:100%"><thead><tr style="background:#eee"><th style="${td};text-align:left">Fecha</th><th style="${td};text-align:left">Estado</th><th style="${td};text-align:left">Motivo / qué se hizo</th><th style="${td}">Jornales</th></tr></thead>
+  <tbody>${filas.replace(/<td/g,`<td style="${td}"`).replace(/<td style="([^"]*)" style="/g,'<td style="$1;')}</tbody></table>
+  <div style="display:flex;justify-content:space-around;margin-top:48px;text-align:center"><div style="border-top:1px solid #111;width:38%;padding-top:4px">Encargado de obra</div><div style="border-top:1px solid #111;width:38%;padding-top:4px">Dirección de obra</div></div>
+  <div style="margin-top:14px;font-size:10px;color:#777">Generado el ${esc(fdate(hoy()))} · Sinner Construcciones</div></div>`}
+function imprimirHtml(html){const w=document.createElement("div");w.id="printArea";w.innerHTML=html;document.body.appendChild(w);
+  document.body.classList.add("imprimiendo");setTimeout(()=>{window.print();setTimeout(()=>{w.remove();document.body.classList.remove("imprimiendo")},500)},150)}
