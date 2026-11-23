@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 12:25";
+const VERSION="23/11 12:35";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -892,7 +892,8 @@ function openMov(m,preset){
   if(isEnc()&&!S.perfil?.caja)return toast("Tu usuario no tiene caja asignada. Pedile a administración que te la asigne.");
   const e=!!m; m=m||{fecha:hoy(),tipo:"egreso",caja:isEnc()?S.perfil.caja:(S.filt.caja!=="Todas"?S.filt.caja:"General"),obra:"",categoria:"Materiales",...(preset||{})};
   const legacyUsd=!!m.usd&&!m.moneda&&m.tipo!=="cambio";
-  const st={tipo:m.tipo,enUsd:legacyUsd,mon:esUsd(m)?"USD":"ARS",pago:m.pago==="tarjeta"?"tarjeta":"caja"};
+  const pasarADolares=legacyUsd&&(m.tipo==="pase"||!(+m.monto));
+  const st={tipo:m.tipo,enUsd:legacyUsd&&!pasarADolares,mon:esUsd(m)||pasarADolares?"USD":"ARS",pago:m.pago==="tarjeta"?"tarjeta":"caja"};
   const TARJ=(S.cfg.tarjetas&&S.cfg.tarjetas.length?S.cfg.tarjetas:["Bancor Federico"]);
   openSheet(`<form id="fm" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar movimiento":"Nuevo movimiento")}
     <div class="seg" id="segTipo">${[["egreso","Salida"],["ingreso","Entrada"],["pase","Pase entre cajas"],...(isEnc()?[]:[["cambio","Cambio US$ → $"],["mover","Entre cuentas"]])].map(([v,l])=>`<button type="button" data-t="${v}" aria-pressed="${st.tipo===v}">${l}</button>`).join("")}</div>
