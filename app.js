@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 11:35";
+const VERSION="23/11 11:40";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -194,7 +194,7 @@ function vCaja(){
     let sign=m.tipo==="ingreso"?1:-1; if(pase&&cRef!=="Todas")sign=m.cajaDestino===cRef?1:-1;
     const cb=m.tipo==="cambio",mv=m.tipo==="mover";
     const t=mv?`${esc(m.cuentaDe||"Efectivo")} → ${esc(m.cuentaA||"Efectivo")}`:cb?`Cambio US$ ${fmtN(m.usd)} → pesos`:pase?`Pase ${esc(m.caja)} → ${esc(m.cajaDestino)}`:esc(m.detalle||m.categoria||"Movimiento");
-    const s=mv?`${esc(m.caja)} · movimiento entre cuentas${m.comision?` · comisión ${fmt(m.comision)}`:""}${m.detalle?" · "+esc(m.detalle):""}`:cb?`${esc(m.caja)} · a ${fmt(m.cotizacion||m.monto/m.usd)} por dólar${m.cotizacionBlue?` (blue ${fmt(m.cotizacionBlue)})`:""}${m.detalle?" · "+esc(m.detalle):""}`:pase?esc(m.detalle||""):`${esc(m.caja)} · ${esc(obraNombre(m.obra))}${m.categoria?" · "+esc(m.categoria):""}${m.usd&&!esUsd(m)?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):"")+(m.lugarCambio?" ("+esc(m.lugarCambio)+")":""):""}`;
+    const s=mv?`${esc(m.caja)} · movimiento entre cuentas${m.comision?` · comisión ${fmt(m.comision)}`:""}${m.detalle?" · "+esc(m.detalle):""}`:cb?`${esc(m.caja)} · a ${fmt(m.cotizacion||m.monto/m.usd)} por dólar${m.detalle?" · "+esc(m.detalle):""}`:pase?esc(m.detalle||""):`${esc(m.caja)} · ${esc(obraNombre(m.obra))}${m.categoria?" · "+esc(m.categoria):""}${m.usd&&!esUsd(m)?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):"")+(m.lugarCambio?" ("+esc(m.lugarCambio)+")":""):""}`;
     const ctTxt=!mv&&(m.cuenta&&m.cuenta!=="Efectivo"||m.cuentaDest&&m.cuentaDest!=="Efectivo")?` · ${esc(m.cuenta&&m.cuenta!=="Efectivo"?m.cuenta:"")}${m.cuentaDest&&m.cuentaDest!=="Efectivo"?" → "+esc(m.cuentaDest):""}`:"";
     const tcTxt=m.pago==="tarjeta"?` · 💳 ${esc(m.tarjeta||"Tarjeta")}${+m.cuotas>1?" en "+m.cuotas+" cuotas":""} (no sale de la caja)`:"";
     const montoTxt=mv?`<span class="note">${fmt(m.monto)}</span>`:m.pago==="tarjeta"?`<span class="note">💳 ${fmt(m.monto)}</span>`:cb?`+ ${fmt(m.monto)}<br><span class="note">− ${fmtU(m.usd)}</span>`:esUsd(m)?`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmtU(m.usd)}`:`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmt(m.monto)}`;
@@ -967,7 +967,7 @@ function openMov(m,preset){
     $("#m_cuotas").addEventListener("input",cuotaInfo);$("#m_monto").addEventListener("input",cuotaInfo);
     function usdInfo(){const el=$("#m_usdInfo");if(!el)return;const u=num($("#m_usdx").value),pz=num($("#m_monto").value),b=num(S.cfg.cotizacion);
       if(st.tipo==="mover"){el.style.display="none";return}
-      if(st.tipo==="cambio"){if(u&&pz){const c=pz/u;el.innerHTML=`Te lo tomaron a <b>${fmt(m2(c))}</b> por dólar.${b?` El blue hoy está a ${fmt(b)}: <b style="color:${c<b?"var(--bad)":"var(--good)"}">${c<b?"la cueva se quedó con":"ganaste"} ${fmt(Math.abs(u*(b-c)))}</b>.`:""}`}else el.textContent="Poné cuántos dólares diste y cuántos pesos te dieron: la app calcula a cuánto te lo tomaron.";el.style.display="";return}
+      if(st.tipo==="cambio"){if(u&&pz){const c=pz/u;el.innerHTML=`Se cambió a <b>${fmt(m2(c))}</b> por dólar.`}else el.textContent="Poné cuántos dólares diste y cuántos pesos te dieron: la app calcula a cuánto se cambió.";el.style.display="";return}
       if(st.mon==="USD"&&!legacyUsd){const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);el.style.display="";
         el.innerHTML=r?`Sale de los dólares de la caja. Para los números de la obra se toma a ${fmt(r.cot)}, el último cambio real (${esc(fdate(r.fecha))}, caja ${esc(r.caja)})${u?`: ${fmt(u*r.cot)}`:""}.`:`Sale de los dólares de la caja. Todavía no hay ningún cambio cargado: para los números de la obra se toma el blue de hoy hasta que cambien.`;return}
       el.style.display="none"}
@@ -977,7 +977,7 @@ function openMov(m,preset){
     $("#m_enusd").onchange=ev=>{st.enUsd=ev.target.checked;upd();calc()};
     /* en dólares: se puede poner a cuánto lo tomaron o directamente los pesos que dieron; uno calcula el otro */
     const info=()=>{const u=num($("#m_usd").value),c=num($("#m_cot").value),b=num(S.cfg.cotizacion);
-      $("#m_cotInfo").innerHTML=st.enUsd&&u&&c?`Entran <b>${fmt(u*c)}</b> en pesos.${b&&Math.abs(c-b)>=1?` Con el blue de hoy (${fmt(b)}) serían ${fmt(u*b)}: <b style="color:${c<b?"var(--bad)":"var(--good)"}">${c<b?"perdimos":"ganamos"} ${fmt(Math.abs(u*(c-b)))}</b> en el cambio.`:""}`:"Poné los dólares y a cuánto te tomaron cada uno, o directamente los pesos que te dieron en “Monto”."};
+      $("#m_cotInfo").innerHTML=st.enUsd&&u&&c?`Entran <b>${fmt(u*c)}</b> en pesos.`:"Poné los dólares y a cuánto te tomaron cada uno, o directamente los pesos que te dieron en “Monto”."};
     const calc=()=>{if(st.enUsd){const v=num($("#m_usd").value)*num($("#m_cot").value);$("#m_monto").value=v?Math.round(v*100)/100:""}info()};
     const desdePesos=()=>{if(st.enUsd){const u=num($("#m_usd").value),p=num($("#m_monto").value);if(u&&p)$("#m_cot").value=Math.round(p/u*100)/100}info()};
     $("#m_usd").oninput=calc;$("#m_cot").oninput=calc;$("#m_monto").addEventListener("input",desdePesos);upd();info();
@@ -2187,9 +2187,9 @@ function vUsd(){
     <p class="note" style="margin:6px 0 0">Total: <b>${fmtU(cajasU.reduce((a,[,u])=>a+u,0))}</b></p></section>
   <section class="card"><div class="row between"><h3>¿A cuánto nos tomaron el dólar?</h3>
     <select id="usdMes" style="max-width:180px"><option value="todo">Todos</option>${meses.map(m=>`<option value="${m}" ${mes===m?"selected":""}>${esc(mlabel(m))}</option>`).join("")}</select></div>
-    ${C.length?`<div class="grid" style="margin:8px 0"><div class="stat"><div class="lbl">Cambiados</div><div class="num">${fmtU(tu)}</div></div><div class="stat"><div class="lbl">Recibimos</div><div class="num">${fmt(tp)}</div></div><div class="stat"><div class="lbl">Promedio</div><div class="num">${fmt(tu?tp/tu:0)}</div></div>${conBlue.length?`<div class="stat"><div class="lbl">Contra el blue</div><div class="num ${perd>0?"neg":"pos"}">${perd>0?"− ":"+ "}${fmt(Math.abs(perd))}</div></div>`:""}</div>
-    <div class="list">${C.map(m=>{const c=+m.monto/(+m.usd),b=+m.cotizacionBlue;return `<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}: ${fmtU(m.usd)} → ${fmt(m.monto)}</span><span class="s">A ${fmt(c)} por dólar${b?` · blue ${fmt(b)} · ${c<b?"la cueva se quedó con":"ganamos"} ${fmt(Math.abs((+m.usd)*(b-c)))}`:""}${m.detalle?" · "+esc(m.detalle):""}</span><span class="m">${fmt(c)}</span></button>`}).join("")}</div>
-    <p class="note" style="margin:6px 0 0">El blue es solo referencia: los pesos salen siempre de lo que dieron en la cueva.</p>`:`<div class="empty">Todavía no hay cambios cargados. Cuando cambien dólares, tocá “+ Cambié dólares”.</div>`}</section>`}
+    ${C.length?`<div class="grid" style="margin:8px 0"><div class="stat"><div class="lbl">Cambiados</div><div class="num">${fmtU(tu)}</div></div><div class="stat"><div class="lbl">Recibimos</div><div class="num">${fmt(tp)}</div></div><div class="stat"><div class="lbl">Promedio</div><div class="num">${fmt(tu?tp/tu:0)}</div></div></div>
+    <div class="list">${C.map(m=>{const c=+m.monto/(+m.usd),b=+m.cotizacionBlue;return `<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}: ${fmtU(m.usd)} → ${fmt(m.monto)}</span><span class="s">A ${fmt(c)} por dólar${m.detalle?" · "+esc(m.detalle):""}</span><span class="m">${fmt(c)}</span></button>`}).join("")}</div>
+`:`<div class="empty">Todavía no hay cambios cargados. Cuando cambien dólares, tocá “+ Cambié dólares”.</div>`}</section>`}
 function bindUsd(V){const s=V.querySelector("#usdMes");if(s)s.onchange=()=>{S.filt.umes=s.value;render()};
   const b=V.querySelector("#usdCambio");if(b)b.onclick=()=>openMov(null,{tipo:"cambio",caja:"Numa"})}
 
