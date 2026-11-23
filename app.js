@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 11:40";
+const VERSION="23/11 11:35";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -951,8 +951,9 @@ function openMov(m,preset){
       $("#segMon").style.display=cb||tc||isEnc()||legacyUsd?"none":"";
       $("#wDest").style.display=p?"":"none";if($("#wProv"))$("#wProv").style.display=st.tipo==="egreso"?"":"none";$("#wObra").style.display=p||cb?"none":"flex";$("#lblCaja").textContent=p?"De la caja":"Caja";
       $("#wUsdF").style.display=st.enUsd&&!cb&&!usd?"grid":"none";$("#m_monto").readOnly=false;
-      $("#wUsdX").style.display=cb||usd?"":"none";$("#lblUsdX").textContent=cb?"Dólares que cambiaste":"Monto en dólares";
-      $("#wMonto").style.display=usd?"none":"";$("#lblMonto").textContent=cb?"Pesos que te dieron":"Monto en pesos";usdInfo();
+      const soloCambio=st.tipo==="cambio";
+      $("#wUsdX").style.display=soloCambio||usd?"":"none";$("#lblUsdX").textContent=soloCambio?"Dólares que cambiaste":"Monto en dólares";
+      $("#wMonto").style.display=usd?"none":"";$("#lblMonto").textContent=soloCambio?"Pesos que te dieron":st.tipo==="mover"?"Pesos que pasaste":"Monto en pesos";usdInfo();
       if($("#wRem"))$("#wRem").style.display=st.tipo==="egreso"?"":"none";
       $("#wVeh").style.display=st.tipo==="egreso"&&vehs().length&&/combustible|mantenimiento veh|vi[aá]tic/i.test($("#m_cat").value)?"":"none";
       if(!e&&st.tipo==="ingreso"&&$("#m_cat").value==="Materiales")$("#m_cat").value="Pago recibido";
@@ -965,6 +966,7 @@ function openMov(m,preset){
     function cuotaInfo(){const el=$("#m_cuotaInfo");if(!el)return;const n=Math.max(1,parseInt($("#m_cuotas").value)||1),t=num($("#m_monto").value);el.textContent=t?`${n} cuota${n>1?"s":""} de ${fmt(t/n)}`:""}
     $("#m_cuotas").addEventListener("input",cuotaInfo);$("#m_monto").addEventListener("input",cuotaInfo);
     function usdInfo(){const el=$("#m_usdInfo");if(!el)return;const u=num($("#m_usdx").value),pz=num($("#m_monto").value),b=num(S.cfg.cotizacion);
+      if(st.tipo==="mover"){el.style.display="none";return}
       if(st.tipo==="cambio"){if(u&&pz){const c=pz/u;el.innerHTML=`Te lo tomaron a <b>${fmt(m2(c))}</b> por dólar.${b?` El blue hoy está a ${fmt(b)}: <b style="color:${c<b?"var(--bad)":"var(--good)"}">${c<b?"la cueva se quedó con":"ganaste"} ${fmt(Math.abs(u*(b-c)))}</b>.`:""}`}else el.textContent="Poné cuántos dólares diste y cuántos pesos te dieron: la app calcula a cuánto te lo tomaron.";el.style.display="";return}
       if(st.mon==="USD"&&!legacyUsd){const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);el.style.display="";
         el.innerHTML=r?`Sale de los dólares de la caja. Para los números de la obra se toma a ${fmt(r.cot)}, el último cambio real (${esc(fdate(r.fecha))}, caja ${esc(r.caja)})${u?`: ${fmt(u*r.cot)}`:""}.`:`Sale de los dólares de la caja. Todavía no hay ningún cambio cargado: para los números de la obra se toma el blue de hoy hasta que cambien.`;return}
