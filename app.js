@@ -15,9 +15,9 @@ const SIN_OBRA = [
   {id:"_federico", nombre:"Personal Federico"},
   {id:"_numa", nombre:"Retiros Numa"}
 ];
-const CATEGORIAS = ["Pago recibido","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
+const CATEGORIAS = ["Pago recibido","Comisiones bancarias","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
 const MOTIVOS = ["Lluvia / clima","Demora del hierro","Falta de material","Falta de personal","Espera de definiciones del cliente","Feriado","Problema de equipo","Otro"];
-const DEF_CFG = {tarjetas:["Bancor Federico"],cotizacion:0, costoJornal:100000, precioJornal:0, listaPrecios:`Concrehaus Nro. 40 (sep 2026) – precios NETOS en U$S sin IVA, camión completo puesto en Córdoba. Ancho útil del panel 1,20 m.
+const DEF_CFG = {cuentas:{Numa:["Mercado Pago"],Federico:["Banco Nación"]},tarjetas:["Bancor Federico"],cotizacion:0, costoJornal:100000, precioJornal:0, listaPrecios:`Concrehaus Nro. 40 (sep 2026) – precios NETOS en U$S sin IVA, camión completo puesto en Córdoba. Ancho útil del panel 1,20 m.
 Paneles EPS (U$S/m²): PCE 04 9,07 · PCE 06 10,53 · PCE 08 11,84 · PCE 10 13,17 · PCE 12 14,80 · PCE 14 16,28 · PCE 16 17,90 · PCE 18 19,97
 Mallas (U$S/unidad): MPC 15 plana 22,5x123 1,18 · MPC 30 plana 30x123 1,69 · MAC 15 angular 18,5x18,5x123 2,11 · MAC 30 angular 30x30x123 3,06 · MUC 08/12 "U" 2,36 · MUC 14/18 "U" 2,64 · MEC 2401 entera 124x240 9,86`, precios:{hormigon:180000, bombaFija:780000, bombaM3:21000, macrofibra:63000}, rend:{pared:10, revoque:12, platea:16}, cajasDesde:"2026-11-01", saldosIniciales:{Lucas:97469.07}, ultimoRecibo:2};
 const S = {movs:[], cierres:[], obras:[], jorn:[], bit:[], pres:[], inv:[], emp:[], liqs:[], cli:[], prov:[], imp:undefined, owner:false, importing:null, auth:"loading", rol:null, perfil:null, authMsg:"", cfg:structuredClone(DEF_CFG), cfgVer:false, loaded:{m:0,o:0,j:0,b:0}, uid:null, filt:{caja:"Todas", mes:hoy().slice(0,7)}, err:null, stale:false};
@@ -44,7 +44,20 @@ function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";cl
 /* ---------- cálculos ---------- */
 /* pesos y dólares: movimientos con moneda "USD" mueven dólares; "cambio" saca dólares y mete pesos */
 const esUsd=m=>m.moneda==="USD";
+/* cuentas dentro de la caja (Numa: Mercado Pago, Federico: Banco Nación): el total no cambia al moverla entre cuentas */
+const cuentasDe=c=>((S.cfg.cuentas||DEF_CFG.cuentas)[c]||[]);
+function efectoCuentas(m,c){const o={},v=+m.monto||0;const add=(k,x)=>{k=k||"Efectivo";o[k]=(o[k]||0)+x};
+  if(m.tipo==="mover"){if(m.caja===c){add(m.cuentaDe,-v);add(m.cuentaA,v)}return o}
+  if(esUsd(m)||m.pago==="tarjeta")return o;
+  if(m.tipo==="pase"){if(m.caja===c)add(m.cuenta,-v);if(m.cajaDestino===c)add(m.cuentaDest,v);return o}
+  if(m.caja!==c)return o;
+  if(m.tipo==="cambio"){add(m.cuenta,v);return o}
+  add(m.cuenta,m.tipo==="ingreso"?v:-v);return o}
+function saldosCuentas(c,hasta){const I=inicioCaja(c);const o={Efectivo:I.ars};for(const k of cuentasDe(c))o[k]=o[k]||0;
+  for(const m of S.movs){const f=m.fecha||"";if(I.desde&&f<I.desde)continue;if(hasta&&f>hasta)continue;for(const [k,x] of Object.entries(efectoCuentas(m,c)))o[k]=(o[k]||0)+x}
+  return o}
 function efecto(m,c){const v=+m.monto||0,u=+m.usd||0;
+  if(m.tipo==="mover")return [0,0];
   if(m.pago==="tarjeta")return [0,0];
   if(m.tipo==="pagoTarjeta")return m.caja===c?[-v,0]:[0,0];
   if(m.tipo==="pase"){const sg=(m.cajaDestino===c?1:0)-(m.caja===c?1:0);return esUsd(m)?[0,sg*u]:[sg*v,0]}
@@ -87,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="20/11 11:30";
+const VERSION="23/11 11:40";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -179,12 +192,13 @@ function vCaja(){
     const pase=m.tipo==="pase";
     const cRef=encM?miC:f.caja;
     let sign=m.tipo==="ingreso"?1:-1; if(pase&&cRef!=="Todas")sign=m.cajaDestino===cRef?1:-1;
-    const cb=m.tipo==="cambio";
-    const t=cb?`Cambio US$ ${fmtN(m.usd)} → pesos`:pase?`Pase ${esc(m.caja)} → ${esc(m.cajaDestino)}`:esc(m.detalle||m.categoria||"Movimiento");
-    const s=cb?`${esc(m.caja)} · a ${fmt(m.cotizacion||m.monto/m.usd)} por dólar${m.cotizacionBlue?` (blue ${fmt(m.cotizacionBlue)})`:""}${m.detalle?" · "+esc(m.detalle):""}`:pase?esc(m.detalle||""):`${esc(m.caja)} · ${esc(obraNombre(m.obra))}${m.categoria?" · "+esc(m.categoria):""}${m.usd&&!esUsd(m)?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):"")+(m.lugarCambio?" ("+esc(m.lugarCambio)+")":""):""}`;
+    const cb=m.tipo==="cambio",mv=m.tipo==="mover";
+    const t=mv?`${esc(m.cuentaDe||"Efectivo")} → ${esc(m.cuentaA||"Efectivo")}`:cb?`Cambio US$ ${fmtN(m.usd)} → pesos`:pase?`Pase ${esc(m.caja)} → ${esc(m.cajaDestino)}`:esc(m.detalle||m.categoria||"Movimiento");
+    const s=mv?`${esc(m.caja)} · movimiento entre cuentas${m.comision?` · comisión ${fmt(m.comision)}`:""}${m.detalle?" · "+esc(m.detalle):""}`:cb?`${esc(m.caja)} · a ${fmt(m.cotizacion||m.monto/m.usd)} por dólar${m.cotizacionBlue?` (blue ${fmt(m.cotizacionBlue)})`:""}${m.detalle?" · "+esc(m.detalle):""}`:pase?esc(m.detalle||""):`${esc(m.caja)} · ${esc(obraNombre(m.obra))}${m.categoria?" · "+esc(m.categoria):""}${m.usd&&!esUsd(m)?" · "+fmtU(m.usd)+(m.cotizacion?" a "+fmt(m.cotizacion):"")+(m.lugarCambio?" ("+esc(m.lugarCambio)+")":""):""}`;
+    const ctTxt=!mv&&(m.cuenta&&m.cuenta!=="Efectivo"||m.cuentaDest&&m.cuentaDest!=="Efectivo")?` · ${esc(m.cuenta&&m.cuenta!=="Efectivo"?m.cuenta:"")}${m.cuentaDest&&m.cuentaDest!=="Efectivo"?" → "+esc(m.cuentaDest):""}`:"";
     const tcTxt=m.pago==="tarjeta"?` · 💳 ${esc(m.tarjeta||"Tarjeta")}${+m.cuotas>1?" en "+m.cuotas+" cuotas":""} (no sale de la caja)`:"";
-    const montoTxt=m.pago==="tarjeta"?`<span class="note">💳 ${fmt(m.monto)}</span>`:cb?`+ ${fmt(m.monto)}<br><span class="note">− ${fmtU(m.usd)}</span>`:esUsd(m)?`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmtU(m.usd)}`:`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmt(m.monto)}`;
-    html+=`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${t}</span><span class="s">${s}${tcTxt}</span>
+    const montoTxt=mv?`<span class="note">${fmt(m.monto)}</span>`:m.pago==="tarjeta"?`<span class="note">💳 ${fmt(m.monto)}</span>`:cb?`+ ${fmt(m.monto)}<br><span class="note">− ${fmtU(m.usd)}</span>`:esUsd(m)?`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmtU(m.usd)}`:`${pase&&cRef==="Todas"?"":sign>0?"+ ":"− "}${fmt(m.monto)}`;
+    html+=`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${t}</span><span class="s">${s}${ctTxt}${tcTxt}</span>
       <span class="m" style="color:${cb||pase&&cRef==="Todas"?"var(--muted)":sign>0?"var(--good)":"var(--ink)"}">${montoTxt}</span></button>`;
   }
   const enc=isEnc();
@@ -196,7 +210,7 @@ function vCaja(){
   <div class="chips" ${enc?'style="display:none"':""}>${["Todas",...CAJAS].map(c=>`<button class="chip" aria-pressed="${f.caja===c}" data-caja="${c}">${c}</button>`).join("")}</div>
   <div class="row between">
     <label class="f" style="flex:1;min-width:160px">Mes<select id="mesSel"><option value="todo" ${f.mes==="todo"?"selected":""}>Todos</option>${meses.map(m=>`<option value="${m}" ${f.mes===m?"selected":""}>${esc(mlabel(m))}</option>`).join("")}</select></label>
-    <div class="stat card" style="padding:8px 12px;${enc?"display:none":""}"><div class="lbl">Saldo ${f.caja==="Todas"?"total":esc(f.caja)}</div><div class="num ${sel<0?"neg":""}">${fmt(sel)}</div>${selU?`<div class="num ${selU<0?"neg":""}" style="font-size:18px">${fmtU(selU)}</div>`:""}</div>
+    <div class="stat card" style="padding:8px 12px;${enc?"display:none":""}"><div class="lbl">Saldo ${f.caja==="Todas"?"total":esc(f.caja)}</div><div class="num ${sel<0?"neg":""}">${fmt(sel)}</div>${selU?`<div class="num ${selU<0?"neg":""}" style="font-size:18px">${fmtU(selU)}</div>`:""}${f.caja!=="Todas"&&cuentasDe(f.caja).length?`<div class="note" style="margin-top:4px">${Object.entries(saldosCuentas(f.caja)).map(([k,x])=>`${esc(k)}: <b>${fmt(x)}</b>`).join("<br>")}</div>`:""}</div>
   </div>
   <div class="list">${html||`<div class="empty">${qw.length?"Nada coincide con la búsqueda. Probá con otra palabra o elegí “Todos” en Mes.":`No hay movimientos ${f.mes==="todo"?"":"en "+esc(mlabel(f.mes))}.`} ${qw.length?"":"Tocá “+ Movimiento” para cargar el primero."}</div>`}</div>
   <div class="fab"><button class="btn pri" data-new="mov">${enc?"+ Gasto":"+ Movimiento"}</button></div>`;
@@ -881,7 +895,7 @@ function openMov(m,preset){
   const st={tipo:m.tipo,enUsd:legacyUsd,mon:esUsd(m)?"USD":"ARS",pago:m.pago==="tarjeta"?"tarjeta":"caja"};
   const TARJ=(S.cfg.tarjetas&&S.cfg.tarjetas.length?S.cfg.tarjetas:["Bancor Federico"]);
   openSheet(`<form id="fm" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar movimiento":"Nuevo movimiento")}
-    <div class="seg" id="segTipo">${[["egreso","Salida"],["ingreso","Entrada"],["pase","Pase entre cajas"],...(isEnc()?[]:[["cambio","Cambio US$ → $"]])].map(([v,l])=>`<button type="button" data-t="${v}" aria-pressed="${st.tipo===v}">${l}</button>`).join("")}</div>
+    <div class="seg" id="segTipo">${[["egreso","Salida"],["ingreso","Entrada"],["pase","Pase entre cajas"],...(isEnc()?[]:[["cambio","Cambio US$ → $"],["mover","Entre cuentas"]])].map(([v,l])=>`<button type="button" data-t="${v}" aria-pressed="${st.tipo===v}">${l}</button>`).join("")}</div>
     <div class="seg" id="segPago" style="max-width:340px">${[["caja","Pagado con la caja"],["tarjeta","Con tarjeta de crédito"]].map(([v,l])=>`<button type="button" data-pago="${v}" aria-pressed="${st.pago===v}">${l}</button>`).join("")}</div>
     <div class="two" id="wTarj"><label class="f">Tarjeta<select id="m_tarj">${[...new Set([...TARJ,...(m.tarjeta?[m.tarjeta]:[])])].map(t=>`<option ${m.tarjeta===t?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
       <label class="f">Cuotas<input id="m_cuotas" inputmode="numeric" value="${m.cuotas||1}"></label>
@@ -890,6 +904,8 @@ function openMov(m,preset){
     <div class="seg" id="segMon" style="max-width:280px">${[["ARS","En pesos"],["USD","En dólares"]].map(([v,l])=>`<button type="button" data-mon="${v}" aria-pressed="${st.mon===v}">${l}</button>`).join("")}</div>
     <div class="two"><label class="f">Fecha<input type="date" id="m_fecha" value="${esc(m.fecha)}" required></label>
       <label class="f"><span id="lblCaja">Caja</span><select id="m_caja" ${isEnc()?"disabled":""}>${(CAJAS.includes(m.caja)?CAJAS:[m.caja,...CAJAS]).map(c=>`<option ${m.caja===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label></div>
+    <div class="two" id="wCuenta"><label class="f"><span id="lblCuenta">Cuenta</span><select id="m_cuenta"></select></label><label class="f" id="wCuentaA"><span id="lblCuentaA">A la cuenta</span><select id="m_cuentaA"></select></label>
+      <label class="f" id="wComi">Comisión que cobraron<input id="m_comi" inputmode="decimal" placeholder="Ej: 60000 o 3%" value="${esc(m.comision||"")}"></label></div>
     <label class="f" id="wDest">A la caja<select id="m_dest">${CAJAS.map(c=>`<option ${m.cajaDestino===c?"selected":""}>${c}</option>`).join("")}</select></label>
     <label class="row" id="wUsd" style="font-size:14px;font-weight:600;${legacyUsd?"":"display:none"}"><input type="checkbox" id="m_enusd" ${st.enUsd?"checked":""}> Es en dólares (cambiados a pesos)</label>
     <label class="f" id="wUsdX"><span id="lblUsdX">Monto en dólares</span><input id="m_usdx" inputmode="decimal" value="${esUsd(m)||m.tipo==="cambio"?(m.usd||""):""}" placeholder="US$"></label>
@@ -916,10 +932,21 @@ function openMov(m,preset){
     wireCommon(sh,"movimientos",m.id);
     const upd=()=>{sh.querySelectorAll("#segTipo button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===st.tipo));
       const tc=st.tipo==="egreso"&&st.pago==="tarjeta"&&!isEnc();if(tc)st.mon="ARS";
+      {const mvT=st.tipo==="mover",cj=$("#m_caja").value,dst=$("#m_dest").value,L=["Efectivo",...cuentasDe(cj)],LD=["Efectivo",...cuentasDe(dst)];
+       const fill=(sel,opts,val)=>{const cur=sel.value||val||"Efectivo";sel.innerHTML=opts.map(o=>`<option ${o===cur?"selected":""}>${esc(o)}</option>`).join("")};
+       fill($("#m_cuenta"),L,mvT?m.cuentaDe:m.cuenta);
+       const pz=st.tipo==="pase"&&cuentasDe(dst).length;
+       fill($("#m_cuentaA"),mvT?L:LD,mvT?(m.cuentaA||L[1]):m.cuentaDest);
+       const usdX=st.mon==="USD"&&!["cambio","mover"].includes(st.tipo);
+       $("#wCuenta").style.display=!isEnc()&&!tc&&!usdX&&(cuentasDe(cj).length||pz)?"grid":"none";
+       $("#lblCuenta").textContent=mvT?"De la cuenta":st.tipo==="ingreso"||st.tipo==="cambio"?"Entra a la cuenta":"Sale de la cuenta";
+       $("#m_cuenta").parentElement.style.display=cuentasDe(cj).length?"":"none";
+       $("#wCuentaA").style.display=mvT||pz?"":"none";$("#lblCuentaA").textContent=mvT?"A la cuenta":"Entra a la cuenta de "+dst;
+       $("#wComi").style.display=mvT?"":"none"}
       $("#segPago").style.display=st.tipo==="egreso"&&!isEnc()&&!legacyUsd?"":"none";
       sh.querySelectorAll("#segPago button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pago===st.pago));
       $("#wTarj").style.display=tc?"grid":"none";$("#lblCaja").parentElement.style.display=tc?"none":"";cuotaInfo();
-      const p=st.tipo==="pase",cb=st.tipo==="cambio",usd=!cb&&st.mon==="USD";
+      const p=st.tipo==="pase",cb=st.tipo==="cambio"||st.tipo==="mover",usd=!cb&&st.mon==="USD";
       sh.querySelectorAll("#segMon button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mon===st.mon));
       $("#segMon").style.display=cb||tc||isEnc()||legacyUsd?"none":"";
       $("#wDest").style.display=p?"":"none";if($("#wProv"))$("#wProv").style.display=st.tipo==="egreso"?"":"none";$("#wObra").style.display=p||cb?"none":"flex";$("#lblCaja").textContent=p?"De la caja":"Caja";
@@ -934,6 +961,7 @@ function openMov(m,preset){
     sh.querySelectorAll("#segTipo button").forEach(b=>b.onclick=()=>{st.tipo=b.dataset.t;upd()});
     sh.querySelectorAll("#segMon button").forEach(b=>b.onclick=()=>{st.mon=b.dataset.mon;upd()});
     sh.querySelectorAll("#segPago button").forEach(b=>b.onclick=()=>{st.pago=b.dataset.pago;upd()});
+    $("#m_caja").addEventListener("change",()=>{$("#m_cuenta").value="";upd()});$("#m_dest").addEventListener("change",upd);
     function cuotaInfo(){const el=$("#m_cuotaInfo");if(!el)return;const n=Math.max(1,parseInt($("#m_cuotas").value)||1),t=num($("#m_monto").value);el.textContent=t?`${n} cuota${n>1?"s":""} de ${fmt(t/n)}`:""}
     $("#m_cuotas").addEventListener("input",cuotaInfo);$("#m_monto").addEventListener("input",cuotaInfo);
     function usdInfo(){const el=$("#m_usdInfo");if(!el)return;const u=num($("#m_usdx").value),pz=num($("#m_monto").value),b=num(S.cfg.cotizacion);
@@ -956,6 +984,7 @@ function openMov(m,preset){
       let monto=num($("#m_monto").value);
       if(usdMode){if(!ux)return toast("Falta el monto en dólares");const r=ultimoCambio($("#m_caja").value,$("#m_fecha").value);const cot=r?r.cot:num(S.cfg.cotizacion);monto=m2(ux*(cot||0))}
       else if(st.tipo==="cambio"){if(!ux||!monto)return toast("Completá los dólares y los pesos que te dieron")}
+      else if(st.tipo==="mover"){if(!monto)return toast("Falta el monto");if($("#m_cuenta").value===$("#m_cuentaA").value)return toast("Elegí dos cuentas distintas")}
       else if(!monto)return toast("Falta el monto");
       const d={fecha:$("#m_fecha").value,tipo:st.tipo,caja:$("#m_caja").value,monto,detalle:$("#m_det").value.trim(),creado:m.creado};
       for(const k of ["reciboNro","remitoNro","remitoA","remitoDoc","remitoForma","remitoItems","origen"])if(m[k]!=null&&m[k]!=="")d[k]=m[k];
@@ -963,8 +992,12 @@ function openMov(m,preset){
       else if(e&&m.pago==="tarjeta"){d.pago=null;d.tarjeta=null;d.cuotas=null;d.mesPrimerResumen=null}
       if(usdMode){d.moneda="USD";d.usd=ux;const r=ultimoCambio(d.caja,d.fecha);d.cotizacion=r?r.cot:num(S.cfg.cotizacion);d.cotRef=r?"ultimo cambio":"blue"}
       if(st.tipo==="cambio"){d.usd=ux;d.cotizacion=m2(monto/ux);if(num(S.cfg.cotizacion))d.cotizacionBlue=num(S.cfg.cotizacion);d.categoria="Cambio de dólares";d.obra="_empresa"}
+      const conCtas=$("#wCuenta").style.display!=="none";
+      if(st.tipo==="mover"){d.cuentaDe=$("#m_cuenta").value;d.cuentaA=$("#m_cuentaA").value;const ct=String($("#m_comi").value||"").trim();
+        d.comision=/%$/.test(ct)?m2(monto*num(ct.replace("%",""))/100):num(ct);d.categoria="Movimiento entre cuentas";d.obra="_empresa"}
+      else if(conCtas){if($("#m_cuenta").parentElement.style.display!=="none")d.cuenta=$("#m_cuenta").value;if(st.tipo==="pase"&&$("#wCuentaA").style.display!=="none")d.cuentaDest=$("#m_cuentaA").value}
       if(st.tipo==="pase"){d.cajaDestino=$("#m_dest").value;if(d.cajaDestino===d.caja)return toast("Elegí dos cajas distintas")}
-      else if(st.tipo==="cambio"){}
+      else if(st.tipo==="cambio"||st.tipo==="mover"){}
       else{d.obra=$("#m_obra").value;d.categoria=$("#m_cat").value;if(!d.obra)return toast("Elegí la obra (o “Sin obra”)");
         if(d.categoria==="Personal Federico"&&d.tipo==="egreso")d.obra="_federico";
         if(d.obra==="_federico"&&d.tipo==="egreso"){d.categoria="Personal Federico";d.rubroPersonal=$("#m_rubp").value}}
@@ -975,7 +1008,12 @@ function openMov(m,preset){
       if(st.tipo==="egreso"&&$("#wVeh").style.display!=="none"&&$("#m_veh").value)d.vehiculo=$("#m_veh").value;
       for(const k of ["empleadoId","liquidacion","usdRef"])if(m[k]!=null&&d[k]==null)d[k]=m[k];
       const rem=!e&&st.tipo==="egreso"&&$("#m_rem")&&$("#m_rem").checked;
-      const nid=await save("movimientos",m.id,d);if(nid){closeSheet();toast("Guardado en la caja "+d.caja);if(rem)setTimeout(()=>emitirRemito({...d,id:typeof nid==="string"?nid:m.id},true),350)}};
+      const nid=await save("movimientos",m.id,d);
+      if(nid&&d.tipo==="mover"){const cid=m.comisionMovId||"";const ref=db.collection("movimientos").doc(cid||undefined);
+        if(d.comision>0){await ref.set({fecha:d.fecha,tipo:"egreso",caja:d.caja,cuenta:d.cuentaDe,monto:d.comision,obra:"_empresa",categoria:"Comisiones bancarias",detalle:`Comisión por pasar ${fmt(d.monto)} de ${d.cuentaDe} a ${d.cuentaA}`,creado:Date.now()});
+          const mid=typeof nid==="string"?nid:m.id;if(!cid)await db.collection("movimientos").doc(mid).set({...d,comisionMovId:ref.id})}
+        else if(cid)await ref.delete()}
+      if(nid){closeSheet();toast("Guardado en la caja "+d.caja);if(rem)setTimeout(()=>emitirRemito({...d,id:typeof nid==="string"?nid:m.id},true),350)}};
   });
 }
 
