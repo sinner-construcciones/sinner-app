@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 15:59";
+const VERSION="23/11 18:10";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1662,6 +1662,7 @@ async function cargarTabla(t){
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
     const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
+  if(t==="obras")S.obras.forEach(o=>{if(typeof o.nombre!=="string"||!o.nombre.trim())o.nombre=o.id;if(!o.estado)o.estado="En curso"});  /* una obra sin nombre no traba la app */
   if(t==="sueldos"){S.liqsPend=S.liqs.filter(l=>String(l.id).startsWith("pend-"));S.liqs=S.liqs.filter(l=>!String(l.id).startsWith("pend-"))}
 }
 async function cargarTodo(){await Promise.all(Object.keys(TABLAS).map(t=>cargarTabla(t)))}
