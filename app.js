@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 12:35";
+const VERSION="23/11 15:45";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -225,6 +225,7 @@ function vJornales(){
     html+=`<button class="item" data-edit-jor="${esc(j.id)}"><span class="t">${esc(obraNombre(j.obra))}</span><span class="s">${esc(j.nota||"")}</span><span class="m">${+j.cantidad} jornal${+j.cantidad===1?"":"es"}</span></button>`}
   const tot=L.reduce((a,j)=>a+(+j.cantidad||0),0);
   return `<h2>Jornales · ${esc(mlabel(mes))}</h2>
+  ${isEnc()?`<button class="btn pri" id="enc_pdf" style="width:100%">📄 Subir planilla de sueldos (PDF)</button>`:""}
   <p class="note" style="margin:0">Se carga cantidad de jornales por obra y por día.${isEnc()?"":` Costo por jornal: ${fmt(S.cfg.costoJornal)}. Los sueldos fijos van aparte, como movimiento de caja.`}</p>
   <section class="card"><h3 style="margin-bottom:8px">Total del mes por obra</h3>
   ${Object.keys(por).length?`<table><tbody>${Object.entries(por).map(([o,c])=>`<tr><td>${esc(obraNombre(o))}</td><td>${c}</td>${isEnc()?"":`<td>${fmt(c*S.cfg.costoJornal)}</td>`}</tr>`).join("")}</tbody>
@@ -541,7 +542,9 @@ function liqTot(F){const t={total:0,adelanto:0,desc:0,saldo:0,jorTotal:0,jorSald
   if(f.tipo==="fijo")t.fijSaldo+=f.saldo;else{t.jorTotal+=f.total;t.jorSaldo+=f.saldo;t.dias+=f.dias}}return t}
 function vSueldos(){
   const tab=S.filt.sue||"liq";
-  return `<h2>Sueldos</h2>
+  const pend=(S.liqsPend||[]);
+  return `<div class="row between"><h2>Sueldos</h2><button class="btn sm pri" id="lq_pdf">Subir planilla (PDF)</button></div>
+  ${pend.length?`<section class="card" style="border-color:var(--warn)"><h3 style="margin-bottom:6px">Planillas recibidas para revisar</h3><div class="list">${pend.map(l=>`<button class="item" data-pend="${esc(l.id)}"><span class="t">Semana ${esc(fdate(l.desde))} al ${esc(fdate(l.hasta))}</span><span class="s">Subida por ${esc(l.subidaPor||"encargado")} · ${(l.filasPdf||[]).length} personas</span><span class="m">${fmt(l.totalPdf||0)}</span></button>`).join("")}</div></section>`:""}
   <div class="seg" style="max-width:520px"><button type="button" data-sue="liq" aria-pressed="${tab==="liq"}">Planilla semanal</button><button type="button" data-sue="emp" aria-pressed="${tab==="emp"}">Empleados (${S.emp.filter(e=>e.activo!==false).length})</button><button type="button" data-sue="hist" aria-pressed="${tab==="hist"}">Historial</button></div>
   ${tab==="liq"?vLiq():tab==="emp"?vEmpleados():vLiqHist()}`;
 }
@@ -586,6 +589,8 @@ async function liqGuardar(extra){
   return await save("sueldos","sem-"+L.desde,d);
 }
 function bindSueldos(){
+  const bp=$("#lq_pdf");if(bp)bp.onclick=()=>subirPlanillaPDF(false);
+  document.querySelectorAll("[data-pend]").forEach(b=>b.onclick=()=>{const l=(S.liqsPend||[]).find(x=>x.id===b.dataset.pend);if(l)revisarPlanilla({desde:l.desde,hasta:l.hasta,filas:l.filasPdf,notas:l.notas||[],pendId:l.id,subidaPor:l.subidaPor})});
   document.querySelectorAll("[data-sue]").forEach(b=>b.onclick=()=>{S.filt.sue=b.dataset.sue;render()});
   document.querySelectorAll("[data-edit-emp]").forEach(b=>b.onclick=()=>openEmp(S.emp.find(x=>x.id===b.dataset.editEmp)));
   document.querySelectorAll("[data-new-emp2]").forEach(b=>b.onclick=()=>openEmp());
@@ -838,6 +843,7 @@ function bindView(v){
   const ac=$("#autoCli");if(ac)ac.onclick=crearClientesDesdeObras;
   V.querySelectorAll("[data-edit-mov]").forEach(b=>b.onclick=()=>openMov(S.movs.find(x=>x.id===b.dataset.editMov)));
   V.querySelectorAll("[data-edit-jor]").forEach(b=>b.onclick=()=>openJor(S.jorn.find(x=>x.id===b.dataset.editJor)));
+  const ep=V.querySelector("#enc_pdf");if(ep)ep.onclick=()=>subirPlanillaPDF(true);
   V.querySelectorAll("[data-edit-bit]").forEach(b=>b.onclick=()=>openBit(S.bit.find(x=>x.id===b.dataset.editBit)));
   V.querySelectorAll("[data-bit-new]").forEach(b=>b.onclick=()=>{const ex=S.bit.find(x=>x.obra===b.dataset.bitNew&&x.fecha===hoy());openBit(ex||{obra:b.dataset.bitNew})});
   V.querySelectorAll("[data-edit-obra]").forEach(b=>b.onclick=()=>{S.legObra=b.dataset.editObra;location.hash="legajo"});
@@ -1655,6 +1661,7 @@ async function cargarTabla(t){
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
     const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
+  if(t==="sueldos"){S.liqsPend=S.liqs.filter(l=>String(l.id).startsWith("pend-"));S.liqs=S.liqs.filter(l=>!String(l.id).startsWith("pend-"))}
 }
 async function cargarTodo(){await Promise.all(Object.keys(TABLAS).map(t=>cargarTabla(t)))}
 function safeRender(){if($("#sheetBg").classList.contains("open"))render.dirty=true;else render()}
@@ -2231,3 +2238,85 @@ function bindTarjetas(V){V.querySelectorAll("[data-pagar]").forEach(b=>b.onclick
   V.querySelectorAll("[data-edit-mov]").forEach(b=>b.onclick=()=>{const m=S.movs.find(x=>x.id===b.dataset.editMov);if(m)openMov(m)});
   const n=V.querySelector("#tjNueva");if(n)n.onclick=async()=>{const t=(prompt("Nombre de la tarjeta (por ejemplo: Visa Macro Ana)")||"").trim();if(!t)return;
     const L=[...new Set([...(S.cfg.tarjetas||["Bancor Federico"]),t])];const {id:_i,_por:_p,...resto}=S.cfg;try{await db.doc("config/general").set({...resto,tarjetas:L});toast("Tarjeta agregada")}catch(e){toast(errMsg(e))}}}
+
+
+/* ---------- planilla de sueldos desde PDF ---------- */
+let _pdfjs=null;
+function cargarPdfJs(){if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);if(_pdfjs)return _pdfjs;
+  _pdfjs=new Promise((ok,no)=>{const sc=document.createElement("script");sc.src="vendor/pdfjs/pdf.min.js";sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="vendor/pdfjs/pdf.worker.min.js";ok(window.pdfjsLib)};sc.onerror=()=>no(new Error("No se pudo cargar el lector de PDF"));document.head.appendChild(sc)});return _pdfjs}
+const nrmTxt=x=>String(x||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+const plata=x=>{const t=String(x||"").trim();if(!t||t==="-"||t==="—")return 0;return +(t.replace(/[^\d]/g,""))||0};
+async function leerPlanillaPDF(file){
+  const lib=await cargarPdfJs();const pdf=await lib.getDocument({data:await file.arrayBuffer()}).promise;const items=[];
+  for(let p=1;p<=pdf.numPages;p++){const pg=await pdf.getPage(p);const tc=await pg.getTextContent();for(const it of tc.items){if(!it.str||!it.str.trim())continue;items.push({p,x:it.transform[4],y:it.transform[5],w:it.width||0,s:it.str.trim()})}}
+  if(!items.length)throw new Error("El PDF no tiene texto (¿es una foto o un escaneo?).");
+  const lineas=[];for(const it of items.sort((a,b)=>a.p-b.p||b.y-a.y||a.x-b.x)){const L=lineas.find(l=>l.p===it.p&&Math.abs(l.y-it.y)<3);if(L)L.it.push(it);else lineas.push({p:it.p,y:it.y,it:[it]})}
+  lineas.forEach(l=>{l.it.sort((a,b)=>a.x-b.x);l.txt=l.it.map(i=>i.s).join(" ")});
+  const todo=lineas.map(l=>l.txt).join("\n");
+  const anio=(todo.match(/\b(20\d\d)\b/)||[,new Date().getFullYear()])[1];
+  let desde="",hasta="";const mm=todo.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\s*al\s*(?:[a-záéíóúñ]+\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/i);
+  if(mm){const y1=mm[3]||mm[6]||anio,y2=mm[6]||anio;desde=`${y1}-${mm[2].padStart(2,"0")}-${mm[1].padStart(2,"0")}`;hasta=`${y2}-${mm[5].padStart(2,"0")}-${mm[4].padStart(2,"0")}`}
+  const hi=lineas.findIndex(l=>/empleado/i.test(l.txt)&&/saldo/i.test(l.txt));if(hi<0)throw new Error("No encontré la fila de títulos (Empleado … Saldo a pagar).");
+  const H=lineas[hi];const COLS=[["nombre",/empleado|nombre/i],["obra",/^obra/i],["modalidad",/modalidad|tipo/i],["dias",/d[ií]as/i],["jornal",/^jornal/i],["fijo",/fijo/i],["bruto",/bruto/i],["adelanto",/adelanto/i],["pasajes",/pasaje|descuento/i],["saldo",/saldo/i],["firma",/firma/i]];
+  const cols=[];for(const it of H.it){const c=COLS.find(([k,re])=>re.test(it.s)&&!cols.some(x=>x.k===k));if(c)cols.push({k:c[0],cx:it.x+it.w/2})}
+  const filas=[],notas=[];let enNotas=false;
+  for(let i=hi+1;i<lineas.length;i++){const l=lineas[i];
+    if(/^total\b/i.test(l.txt)){continue}
+    if(/^notas?\b/i.test(l.txt)){enNotas=true;continue}
+    if(enNotas||/^[•\-*·]/.test(l.txt)){if(l.txt.replace(/^[•\-*·]\s*/,""))notas.push(l.txt.replace(/^[•\-*·]\s*/,""));continue}
+    if(/empleado/i.test(l.txt)&&/saldo/i.test(l.txt))continue;
+    const f={};for(const it of l.it){const c=cols.reduce((a,b)=>Math.abs(b.cx-(it.x+it.w/2))<Math.abs(a.cx-(it.x+it.w/2))?b:a);f[c.k]=(f[c.k]?f[c.k]+" ":"")+it.s}
+    if(!f.nombre||!(f.saldo||f.bruto))continue;
+    filas.push({nombre:f.nombre.trim(),obraTxt:(f.obra||"").trim(),fijoTipo:/fijo/i.test(f.modalidad||""),dias:num(f.dias)||0,jornal:plata(f.jornal),fijo:plata(f.fijo),bruto:plata(f.bruto),adelanto:plata(f.adelanto),pasajes:plata(f.pasajes),saldo:plata(f.saldo)})}
+  if(!filas.length)throw new Error("No encontré filas de empleados en el PDF.");
+  return {desde,hasta,filas,notas}}
+function elegirArchivo(){return new Promise(res=>{const i=document.createElement("input");i.type="file";i.style.display="none";document.body.appendChild(i);i.onchange=()=>{res(i.files[0]);i.remove()};i.click()})}
+async function subirPlanillaPDF(comoEnc){
+  const f=await elegirArchivo();if(!f)return;toast("Leyendo la planilla…");
+  let R;try{R=await leerPlanillaPDF(f)}catch(e){return alert("No pude leer la planilla: "+(e.message||e)+"\n\nTiene que ser un PDF con texto, como el que se arma en la computadora (no una foto).")}
+  if(comoEnc)return enviarPlanillaEnc(R);
+  revisarPlanilla(R)}
+function empPorNombre(n){const t=nrmTxt(n);const L=S.emp||[];
+  return L.find(e=>nrmTxt(e.nombre)===t)||L.find(e=>nrmTxt(e.notas).split(" ").includes(t)&&t.length>3)||L.find(e=>t.startsWith(nrmTxt(e.nombre)+" ")||nrmTxt(e.nombre).startsWith(t+" "))||L.find(e=>t.split(" ")[0]===nrmTxt(e.nombre).split(" ")[0]&&t.split(" ").length===1)||null}
+function obraPorTexto(t){const n=nrmTxt(t);if(!n)return "";const al=({"v gral belgrano":"emilia","villa gral belgrano":"emilia","villa general belgrano":"emilia","vgb":"emilia"})[n]||(S.cfg.aliasObras||{})[n];if(al&&S.obras.some(o=>o.id===al))return al;
+  const O=S.obras.filter(o=>!o.id.startsWith("_"));const o=O.find(o=>nrmTxt(o.nombre)===n)||O.find(o=>nrmTxt(o.nombre).includes(n)||n.includes(nrmTxt(o.nombre).split(" ")[0]+" ")||nrmTxt(o.nombre).split(" ")[0]===n.split(" ")[0]);return o?o.id:""}
+function revisarPlanilla(R){
+  const filas=R.filas.map(f=>{const e=empPorNombre(f.nombre);return {...f,empId:e?e.id:"",obra:f.fijoTipo?"":obraPorTexto(f.obraTxt)}});
+  const tot=filas.reduce((a,f)=>a+f.saldo,0),obrasOpt=S.obras.filter(o=>!o.id.startsWith("_"));
+  openSheet(`<div style="display:flex;flex-direction:column;gap:10px">${sheetHead("Revisar planilla de sueldos")}
+    ${R.subidaPor?`<p class="note" style="margin:0">Subida por ${esc(R.subidaPor)}.</p>`:""}
+    <div class="two"><label class="f">Desde<input type="date" id="pp_d" value="${esc(R.desde)}"></label><label class="f">Hasta (día de pago)<input type="date" id="pp_h" value="${esc(R.hasta)}"></label></div>
+    <div class="list">${filas.map((f,i)=>{const e=S.emp.find(x=>x.id===f.empId);const cambioJ=e&&!f.fijoTipo&&f.jornal&&+e.jornal!==f.jornal;
+      return `<div class="item" style="cursor:default;display:block">
+      <div class="row between"><b>${esc(f.nombre)}</b><b>${fmt(f.saldo)}</b></div>
+      <div class="two" style="margin-top:6px"><label class="f">Empleado<select data-pe="${i}"><option value="">${e?"":"⚠ No está: crear empleado nuevo"}</option>${S.emp.filter(x=>x.activo!==false||x.id===f.empId).map(x=>`<option value="${esc(x.id)}" ${x.id===f.empId?"selected":""}>${esc(x.nombre)}</option>`).join("")}</select></label>
+      ${f.fijoTipo?`<span class="note" style="align-self:end">Sueldo fijo ${fmt(f.fijo||f.bruto)}</span>`:`<label class="f">Obra ${f.obraTxt?`(“${esc(f.obraTxt)}”)`:"(vacía en el PDF)"}<select data-po="${i}"><option value="">${f.obra?"":"⚠ Elegí la obra"}</option>${obrasOpt.map(o=>`<option value="${esc(o.id)}" ${o.id===f.obra?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></label>`}</div>
+      <p class="note" style="margin:4px 0 0">${f.fijoTipo?"":`${f.dias} días × ${fmt(f.jornal)} = ${fmt(f.bruto)}`}${f.adelanto?` · adelantos − ${fmt(f.adelanto)}`:""}${f.pasajes?` · pasajes − ${fmt(f.pasajes)}`:""}${cambioJ?` · <b style="color:var(--warn)">el jornal cambió: ficha ${fmt(e.jornal)} → planilla ${fmt(f.jornal)} (se actualiza la ficha)</b>`:""}</p></div>`}).join("")}</div>
+    <div class="row between"><b>Total a pagar</b><b>${fmt(tot)}</b></div>
+    ${R.notas&&R.notas.length?`<section class="card" style="margin:0"><b>Notas de la planilla</b><ul style="margin:6px 0 0 18px;padding:0">${R.notas.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></section>`:""}
+    <p class="note" style="margin:0">Se guarda como la planilla de esa semana. Después tocá “Registrar pago” para elegir de qué caja salió.</p>
+    <button class="btn pri" id="pp_ok">Guardar planilla</button></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    sh.querySelectorAll("[data-pe]").forEach(x=>x.onchange=()=>filas[+x.dataset.pe].empId=x.value);
+    sh.querySelectorAll("[data-po]").forEach(x=>x.onchange=()=>filas[+x.dataset.po].obra=x.value);
+    $("#pp_ok").onclick=async()=>{const desde=$("#pp_d").value,hasta=$("#pp_h").value;if(!desde||!hasta)return toast("Faltan las fechas de la semana");
+      if(filas.some(f=>!f.fijoTipo&&!f.obra)&&!confirm("Hay personas sin obra elegida: su sueldo no se va a repartir en ninguna obra. ¿Guardar igual?"))return;
+      try{const alias={...(S.cfg.aliasObras||{})};
+        for(const f of filas){
+          if(!f.empId){const id=nrmTxt(f.nombre).replace(/ /g,"-")||("emp"+Date.now());await db.collection("empleados").doc(id).set({nombre:f.nombre,tipo:f.fijoTipo?"fijo":"jornal",jornal:f.fijoTipo?0:f.jornal,sueldoFijo:f.fijoTipo?(f.fijo||f.bruto):0,activo:true,notas:"Alta desde planilla "+fdate(desde),creado:Date.now()});f.empId=id}
+          else{const e=S.emp.find(x=>x.id===f.empId);if(e&&!f.fijoTipo&&f.jornal&&+e.jornal!==f.jornal){const {id:_i,_por:_p,...r}=e;await db.collection("empleados").doc(e.id).set({...r,jornal:f.jornal,notas:((e.notas||"")+` · Desde ${fdate(desde)} ${fmt(f.jornal)} por día`).replace(/^ · /,"")})}}
+          if(f.obraTxt&&f.obra)alias[nrmTxt(f.obraTxt)]=f.obra}
+        const F=filas.map(f=>{const e=S.emp.find(x=>x.id===f.empId);return {empId:f.empId,nombre:e?e.nombre:f.nombre,tipo:f.fijoTipo?"fijo":"jornal",obra:f.obra||"",dias:f.dias,jornal:f.fijoTipo?0:f.jornal,fijo:f.fijoTipo?(f.fijo||f.bruto):0,total:f.bruto||f.saldo+f.adelanto+f.pasajes,adelanto:f.adelanto,desc:f.pasajes,saldo:f.saldo}});
+        const T=F.reduce((a,f)=>({t:a.t+f.total,ad:a.ad+f.adelanto,de:a.de+f.desc,sa:a.sa+f.saldo}),{t:0,ad:0,de:0,sa:0});
+        const prev=S.liqs.find(l=>l.id==="sem-"+desde)||{};
+        await db.collection("sueldos").doc("sem-"+desde).set({desde,hasta,caja:prev.caja||"Numa",filas:F,total:T.t,adelanto:T.ad,desc:T.de,saldo:T.sa,pagado:!!prev.pagado,fechaPago:prev.fechaPago||"",movIds:prev.movIds||{},...(prev.pagos?{pagos:prev.pagos,pagadoMonto:prev.pagadoMonto}:{}),nota:(R.notas||[]).join(" · "),origen:R.subidaPor?"PDF de "+R.subidaPor:"PDF",creado:prev.creado||Date.now()});
+        if(JSON.stringify(alias)!==JSON.stringify(S.cfg.aliasObras||{})){const {id:_i,_por:_p,...resto}=S.cfg;await db.doc("config/general").set({...resto,aliasObras:alias})}
+        if(R.pendId)await db.collection("sueldos").doc(R.pendId).delete();
+        closeSheet();toast("Planilla guardada");liqAbrir(desde,hasta);S.filt.sue="liq";location.hash="sueldos";render()
+      }catch(e){toast(errMsg(e))}};
+  })}
+/* encargado: sube el PDF y queda para que administración lo revise */
+async function enviarPlanillaEnc(R){const tot=R.filas.reduce((a,f)=>a+f.saldo,0);
+  if(!confirm(`Planilla del ${fdate(R.desde)} al ${fdate(R.hasta)}: ${R.filas.length} personas, total ${fmt(tot)}.\n\n¿La envío a administración para que la revise?`))return;
+  try{await db.collection("sueldos").doc("pend-"+Date.now()).set({pendiente:true,desde:R.desde,hasta:R.hasta,filasPdf:R.filas,notas:R.notas,totalPdf:tot,subidaPor:(S.perfil&&S.perfil.nombre)||S.user?.email||"encargado",creado:Date.now()});toast("Planilla enviada a administración")}
+  catch(e){alert("No se pudo enviar: "+errMsg(e)+"\n\nAvisale a Tami: falta activar el permiso (SQL 8).")}}
