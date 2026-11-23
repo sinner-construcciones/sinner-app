@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 15:45";
+const VERSION="23/11 15:26";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
