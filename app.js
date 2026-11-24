@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="23/11 18:10";
+const VERSION="24/11 11:41";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -234,17 +234,40 @@ function vJornales(){
   <div class="fab"><button class="btn pri" data-new="jor">+ Jornales</button></div>`;
 }
 
+function bitDias(obras,desde,hasta){
+  /* días lun–sáb (domingo solo si hay registro) por obra, con su estado */
+  const out=[];const t=hoy();if(hasta>t)hasta=t;
+  for(const o of obras){let d0=desde;const f=fechasObra(o);if(!f.ini)continue;if(f.ini>d0)d0=f.ini;let d1=hasta;if(f.fin&&f.fin<d1)d1=f.fin;
+    const reg={};S.bit.filter(b=>b.obra===o.id&&b.fecha>=d0&&b.fecha<=d1).forEach(b=>{(reg[b.fecha]=reg[b.fecha]||[]).push(b)});
+    for(let x=new Date(d0+"T12:00");x.toISOString().slice(0,10)<=d1;x.setDate(x.getDate()+1)){const f2=x.toISOString().slice(0,10),L=reg[f2]||[];if(x.getDay()===0&&!L.length)continue;
+      const est=L.length?(L.some(b=>b.trabajo==="si")?"si":L.some(b=>b.trabajo==="parcial")?"parcial":"no"):"sin";out.push({obra:o.id,fecha:f2,est,regs:L})}}
+  return out}
 function vBitacora(){
-  const ob=S.filt.bobra||"todas";
+  const ob=S.filt.bobra||"todas",mes=S.filt.bmes||hoy().slice(0,7),tip=S.filt.btipo||"";
+  const obras=(ob==="todas"?S.obras.filter(o=>!o.id.startsWith("_")&&o.estado!=="Terminada"):S.obras.filter(o=>o.id===ob));
+  const [y,m]=mes.split("-").map(Number);const fin=new Date(y,m,0).getDate();
+  const D=mes==="todo"?[]:bitDias(obras,mes+"-01",mes+"-"+String(fin).padStart(2,"0"));
+  const c={si:0,parcial:0,no:0,sin:0};D.forEach(d=>c[d.est]++);
+  const pct=D.length?Math.round((c.si+c.parcial*0.5)/D.length*100):null;
   let L=[...S.bit].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   if(ob!=="todas")L=L.filter(b=>b.obra===ob);
-  L=L.slice(0,200);
+  if(mes!=="todo")L=L.filter(b=>(b.fecha||"").startsWith(mes));
+  if(tip&&tip!=="sin")L=L.filter(b=>b.trabajo===tip);
+  const meses=[...new Set([hoy().slice(0,7),...S.bit.map(b=>(b.fecha||"").slice(0,7)).filter(Boolean)])].sort().reverse();
+  const stat=(k,l,cls)=>`<button class="card stat" data-btipo="${k}" style="cursor:pointer;text-align:left;${tip===k?"outline:2px solid var(--acc);":""}"><div class="lbl">${l}</div><div class="num ${cls}">${c[k]}</div></button>`;
+  const nf=n=>n.fotos&&n.fotos.length?` · 📷 ${n.fotos.length}`:"";
   return `<div class="row between"><h2>Bitácora de obra</h2>${isEnc()?"":`<button class="btn sm" id="bit_print">🖨️ Imprimir resumen</button>`}</div>
-  <p class="note" style="margin:0">Un registro por obra y por día: si se trabajó y, si no, por qué. Sirve para justificar atrasos.</p>
-  <div class="chips"><button class="chip" aria-pressed="${ob==="todas"}" data-bobra="todas">Todas</button>${sortObras(S.obras).map(o=>`<button class="chip" aria-pressed="${ob===o.id}" data-bobra="${esc(o.id)}">${esc(o.nombre)}</button>`).join("")}</div>
-  ${ob!=="todas"?(()=>{const r=resObra(ob);return `<div class="grid"><div class="card stat"><div class="lbl">Días trabajados</div><div class="num pos">${r.trab}</div></div><div class="card stat"><div class="lbl">Parciales</div><div class="num">${r.parc}</div></div><div class="card stat"><div class="lbl">Días perdidos</div><div class="num neg">${r.perd}</div></div></div>`})():""}
-  <div class="list">${L.map(b=>`<button class="item" data-edit-bit="${esc(b.id)}"><span class="t">${esc(fdate(b.fecha))} · ${esc(obraNombre(b.obra))}</span>
-    <span class="s">${b.trabajo!=="si"&&b.motivo?esc(b.motivo)+(b.detalle?" — ":""):""}${esc(b.detalle||"")}${b.jornales?` · ${esc(b.jornales)} en obra`:""}</span><span class="m">${pillTrab(b.trabajo)}</span></button>`).join("")||`<div class="empty">Todavía no hay registros.</div>`}</div>
+  <div class="chips"><button class="chip" aria-pressed="${ob==="todas"}" data-bobra="todas">Todas</button>${sortObras(S.obras).filter(o=>!o.id.startsWith("_")).map(o=>`<button class="chip" aria-pressed="${ob===o.id}" data-bobra="${esc(o.id)}">${esc(o.nombre)}</button>`).join("")}</div>
+  <label class="f">Mes<select id="bit_mes"><option value="todo" ${mes==="todo"?"selected":""}>Todos los meses</option>${meses.map(x=>`<option value="${x}" ${x===mes?"selected":""}>${esc(mlabel(x))}</option>`).join("")}</select></label>
+  ${mes!=="todo"?`<section class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div class="row between"><b>${ob==="todas"?"Todas las obras en curso":esc(obraNombre(ob))} · ${esc(mlabel(mes))}</b><b style="font-size:20px;color:${pct===null?"var(--muted)":pct>=80?"var(--good)":pct>=60?"var(--warn)":"var(--bad)"}">${pct===null?"—":pct+"%"}</b></div>
+    <div style="height:8px;border-radius:6px;background:var(--line);overflow:hidden"><div style="height:100%;width:${pct||0}%;background:${pct>=80?"var(--good)":pct>=60?"var(--warn)":"var(--bad)"}"></div></div>
+    <div class="note" style="margin:0">Trabajado del mes: días trabajados (los parciales cuentan medio) sobre ${D.length} día${D.length===1?"":"s"} hábil${D.length===1?"":"es"} hasta hoy, de lunes a sábado${ob==="todas"?", sumando todas las obras":""}.</div>
+    <div class="grid">${stat("si","Trabajados","pos")}${stat("parcial","Parciales","")}${stat("no","No trabajados","neg")}${stat("sin","Sin registro","")}</div>
+    ${tip?`<button class="btn sm" data-btipo="">Ver todos los días ✕</button>`:`<div class="note" style="margin:0">Tocá un número para ver esos días.</div>`}</section>`:""}
+  ${tip==="sin"?`<div class="list">${D.filter(d=>d.est==="sin").sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(d=>`<button class="item" data-bsin="${esc(d.obra)}|${esc(d.fecha)}"><span class="t">${esc(fdate(d.fecha))} · ${esc(obraNombre(d.obra))}</span><span class="s">Nadie cargó este día — tocá para cargarlo</span><span class="m"><span class="pill p-mut">Sin registro</span></span></button>`).join("")||`<div class="empty">No hay días sin registro. ¡Bien!</div>`}</div>`
+  :`<div class="list">${L.slice(0,300).map(b=>`<button class="item" data-edit-bit="${esc(b.id)}"><span class="t">${esc(fdate(b.fecha))} · ${esc(obraNombre(b.obra))}</span>
+    <span class="s">${b.trabajo!=="si"&&b.motivo?esc(b.motivo)+(b.detalle?" — ":""):""}${esc(b.detalle||"")}${b.jornales?` · ${esc(b.jornales)} en obra`:""}${nf(b)}</span><span class="m">${pillTrab(b.trabajo)}</span></button>`).join("")||`<div class="empty">No hay registros${tip?" de ese tipo":""} en este período.</div>`}</div>`}
   <div class="fab"><button class="btn pri" data-new="bit">+ Registro del día</button></div>`;
 }
 
@@ -850,8 +873,11 @@ function bindView(v){
   V.querySelectorAll("[data-caja]").forEach(b=>b.onclick=()=>{S.filt.caja=b.dataset.caja;render()});
   V.querySelectorAll("[data-encv]").forEach(b=>b.onclick=()=>{S.filt.encv=b.dataset.encv;render()});
   V.querySelectorAll("[data-oh]").forEach(b=>b.onclick=()=>{S.filt.oh=b.dataset.oh;render()});
-  V.querySelectorAll("[data-bobra]").forEach(b=>b.onclick=()=>{S.filt.bobra=b.dataset.bobra;render()});
+  V.querySelectorAll("[data-bobra]").forEach(b=>b.onclick=()=>{S.filt.bobra=b.dataset.bobra;S.filt.btipo="";render()});
   const bpr=V.querySelector("#bit_print");if(bpr)bpr.onclick=openResumenBit;
+  const bm=V.querySelector("#bit_mes");if(bm)bm.onchange=()=>{S.filt.bmes=bm.value;S.filt.btipo="";render()};
+  V.querySelectorAll("[data-btipo]").forEach(b=>b.onclick=()=>{S.filt.btipo=S.filt.btipo===b.dataset.btipo?"":b.dataset.btipo;render()});
+  V.querySelectorAll("[data-bsin]").forEach(b=>b.onclick=()=>{const [o,f]=b.dataset.bsin.split("|");openBit({obra:o,fecha:f})});
   const ms=$("#mesSel");if(ms)ms.onchange=()=>{S.filt.mes=ms.value;render()};
   const em=$("#expMov");if(em)em.onclick=exportMovs;
   const er=$("#expRes");if(er)er.onclick=exportRes;
@@ -1058,9 +1084,22 @@ function openBit(b){
     <label class="f">Personas en obra<input id="b_jor" inputmode="numeric" value="${esc(b.jornales||"")}" placeholder="Opcional"></label>
     <label class="f"><span class="row between">Qué se hizo / observaciones ${dict?`<button type="button" class="mic" id="micBtn">Dictar</button>`:""}</span>
       <textarea id="b_det" placeholder="Ej: se terminó el encofrado del aula 3; el hierro llega el lunes">${esc(b.detalle||"")}</textarea></label>
+    <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)">Fotos del avance
+      <div id="b_fotos" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <label class="btn sm" style="cursor:pointer;align-self:flex-start">📷 Agregar fotos<input type="file" id="b_fin" accept="image/*" multiple style="display:none"></label></div>
     ${!e&&b.obra&&S.bit.some(x=>x.obra===b.obra&&x.fecha===b.fecha)?`<div class="banner">Ya hay un registro de esta obra para ese día.</div>`:""}
     ${footBtns(e)}</form>`,sh=>{
     wireCommon(sh,"bitacora",b.id);
+    const ft={guardadas:[...(b.fotos||[])],nuevas:[],quitar:[]};
+    const pintar=async()=>{const box=$("#b_fotos");if(!box)return;
+      const urls=await urlsFotos(ft.guardadas);
+      box.innerHTML=[...ft.guardadas.map((p,i)=>`<span style="position:relative"><img src="${esc(urls[p]||"")}" data-ver="${esc(urls[p]||"")}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;background:var(--line)"><button type="button" data-qg="${i}" style="position:absolute;top:-6px;right:-6px;border-radius:50%;width:22px;height:22px;border:0;background:#000;color:#fff">×</button></span>`),
+        ...ft.nuevas.map((n,i)=>`<span style="position:relative"><img src="${n.url}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;opacity:.8"><button type="button" data-qn="${i}" style="position:absolute;top:-6px;right:-6px;border-radius:50%;width:22px;height:22px;border:0;background:#000;color:#fff">×</button></span>`)].join("")||`<span class="note" style="font-weight:400">Sin fotos</span>`;
+      box.querySelectorAll("[data-qg]").forEach(x=>x.onclick=()=>{ft.quitar.push(ft.guardadas.splice(+x.dataset.qg,1)[0]);pintar()});
+      box.querySelectorAll("[data-qn]").forEach(x=>x.onclick=()=>{ft.nuevas.splice(+x.dataset.qn,1);pintar()});
+      box.querySelectorAll("[data-ver]").forEach(x=>x.onclick=()=>{if(x.dataset.ver)window.open(x.dataset.ver,"_blank")})};
+    pintar();
+    $("#b_fin").onchange=async ev=>{const fs=[...ev.target.files];ev.target.value="";for(const f of fs){try{const bl=await achicarFoto(f);ft.nuevas.push({blob:bl,url:URL.createObjectURL(bl)})}catch(_){toast("Una foto no se pudo leer")}}pintar()};
     const upd=()=>{sh.querySelectorAll("#segT button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.t===st.t));$("#wMot").style.display=st.t==="si"?"none":""};
     sh.querySelectorAll("#segT button").forEach(x=>x.onclick=()=>{st.t=x.dataset.t;upd()});upd();
     const mic=$("#micBtn");
@@ -1073,7 +1112,15 @@ function openBit(b){
     }
     $("#fb").onsubmit=async ev=>{ev.preventDefault();if(!$("#b_obra").value)return toast("Primero cargá una obra");
       const d={fecha:$("#b_fecha").value,obra:$("#b_obra").value,trabajo:st.t,motivo:st.t==="si"?"":$("#b_mot").value,jornales:num($("#b_jor").value)||"",detalle:$("#b_det").value.trim(),creado:b.creado};
-      if(await save("bitacora",b.id,d)){closeSheet();toast("Registro guardado")}};
+      const btn=ev.submitter||$("#fb button[type=submit]");if(btn)btn.disabled=true;
+      let fotos=[...ft.guardadas],mal=0;
+      for(const [i,n] of ft.nuevas.entries()){if(btn)btn.textContent=`Subiendo foto ${i+1} de ${ft.nuevas.length}…`;
+        const path=`${d.obra}/fotos/${Date.now()}_Bitacora_${d.fecha}_${i+1}.jpg`;
+        const {error}=await sb.storage.from("legajos").upload(path,n.blob,{contentType:"image/jpeg",upsert:false});if(error)mal++;else fotos.push(path)}
+      if(ft.quitar.length)sb.storage.from("legajos").remove(ft.quitar).catch(()=>{});
+      if(fotos.length||b.fotos)d.fotos=fotos;
+      if(await save("bitacora",b.id,d)){closeSheet();toast(mal?`Registro guardado, pero ${mal} foto${mal===1?"":"s"} no se pudo subir (avisale a administración)`:"Registro guardado")}
+      else if(btn){btn.disabled=false;btn.textContent="Guardar"}};
   });
 }
 
@@ -2332,6 +2379,7 @@ function openResumenBit(){
     <div class="two"><label class="f">Desde<input type="date" id="rb_d" value="${m}-01"></label><label class="f">Hasta<input type="date" id="rb_h" value="${hoy()}"></label></div>
     <div class="chips"><button class="chip" data-rbq="sem">Esta semana</button><button class="chip" data-rbq="mes">Este mes</button><button class="chip" data-rbq="ant">Mes pasado</button><button class="chip" data-rbq="obra">Toda la obra</button></div>
     <p class="note" style="margin:0">Cuenta de lunes a sábado. Los días sin nada cargado salen como “sin registro”. Desde la ventana de impresión podés imprimir o guardar como PDF.</p>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rb_f" checked> Incluir fotos (hasta 2 por día)</label>
     <button class="btn pri" id="rb_ok">🖨️ Imprimir</button></div>`,sh=>{
     sh.querySelector("[data-close]").onclick=closeSheet;
     sh.querySelectorAll("[data-rbq]").forEach(b=>b.onclick=()=>{const q=b.dataset.rbq,t=hoy(),d=new Date(t+"T12:00");let a,z=t;
@@ -2340,11 +2388,13 @@ function openResumenBit(){
       else if(q==="ant"){d.setDate(1);d.setMonth(d.getMonth()-1);a=d.toISOString().slice(0,10);const e=new Date(d);e.setMonth(e.getMonth()+1);e.setDate(0);z=e.toISOString().slice(0,10)}
       else{const o=$("#rb_o").value;const fs=S.bit.filter(b=>o==="todas"||b.obra===o).map(b=>b.fecha).sort();const ob=S.obras.find(x=>x.id===o);a=(ob&&ob.fechaInicio)||fs[0]||t}
       $("#rb_d").value=a;$("#rb_h").value=z});
-    $("#rb_ok").onclick=()=>{const o=$("#rb_o").value,d=$("#rb_d").value,h=$("#rb_h").value;if(!d||!h||d>h)return toast("Revisá las fechas");
+    $("#rb_ok").onclick=async()=>{const o=$("#rb_o").value,d=$("#rb_d").value,h=$("#rb_h").value;if(!d||!h||d>h)return toast("Revisá las fechas");
       const ids=o==="todas"?sortObras(S.obras).filter(x=>!x.id.startsWith("_")&&S.bit.some(b=>b.obra===x.id&&b.fecha>=d&&b.fecha<=h)).map(x=>x.id):[o];
       if(!ids.length)return toast("No hay registros de bitácora en esas fechas");
-      closeSheet();imprimirHtml(ids.map((id,i)=>hojaBit(id,d,h,i>0)).join(""))}})}
-function hojaBit(obraId,d,h,salto){
+      const conF=$("#rb_f").checked;closeSheet();
+      if(conF){toast("Preparando fotos…");const ps=S.bit.filter(b=>ids.includes(b.obra)&&b.fecha>=d&&b.fecha<=h).flatMap(b=>(b.fotos||[]).slice(0,2));await urlsFotos(ps)}
+      imprimirHtml(ids.map((id,i)=>hojaBit(id,d,h,i>0,conF)).join(""))}})}
+function hojaBit(obraId,d,h,salto,conF){
   const o=S.obras.find(x=>x.id===obraId)||{nombre:obraId};const logo=(document.querySelector("img.logo")||{}).src||"";
   const porDia={};S.bit.filter(b=>b.obra===obraId&&b.fecha>=d&&b.fecha<=h).forEach(b=>{(porDia[b.fecha]=porDia[b.fecha]||[]).push(b)});
   const jor={};S.jorn.filter(j=>j.obra===obraId&&j.fecha>=d&&j.fecha<=h).forEach(j=>jor[j.fecha]=(jor[j.fecha]||0)+(+j.cantidad||0));
@@ -2357,7 +2407,8 @@ function hojaBit(obraId,d,h,salto){
     const col={si:"#1d7a3a",parcial:"#a86b00",no:"#b3261e",sin:"#888"}[t];
     const det=L.map(b=>[(b.trabajo!=="si"&&b.motivo)?b.motivo:"",b.detalle||""].filter(Boolean).join(" — ")).filter(Boolean).join(" · ");
     const jj=jor[f]||L.map(b=>+b.jornales||0).reduce((a,b)=>Math.max(a,b),0)||"";
-    return `<tr><td style="white-space:nowrap">${DN[new Date(f+"T12:00").getDay()]} ${esc(fdate(f))}</td><td style="color:${col};font-weight:600;white-space:nowrap">${est}</td><td>${esc(det)}</td><td style="text-align:center">${jj}</td></tr>`}).join("");
+    const fs=conF?L.flatMap(b=>b.fotos||[]).slice(0,2).map(p=>(_fotoUrl[p]||{}).u).filter(Boolean):[];
+    return `<tr><td style="white-space:nowrap">${DN[new Date(f+"T12:00").getDay()]} ${esc(fdate(f))}</td><td style="color:${col};font-weight:600;white-space:nowrap">${est}</td><td>${esc(det)}${fs.length?`<div style="display:flex;gap:6px;margin-top:6px">${fs.map(u=>`<img src="${esc(u)}" style="height:110px;max-width:48%;object-fit:cover;border-radius:4px">`).join("")}</div>`:""}</td><td style="text-align:center">${jj}</td></tr>`}).join("");
   const td="border:1px solid #ccc;padding:5px 7px;vertical-align:top;text-align:left";
   return `<div style="${salto?"page-break-before:always;":""}font:12px/1.4 system-ui,sans-serif;color:#111">
   <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px">
@@ -2372,4 +2423,17 @@ function hojaBit(obraId,d,h,salto){
   <div style="display:flex;justify-content:space-around;margin-top:48px;text-align:center"><div style="border-top:1px solid #111;width:38%;padding-top:4px">Encargado de obra</div><div style="border-top:1px solid #111;width:38%;padding-top:4px">Dirección de obra</div></div>
   <div style="margin-top:14px;font-size:10px;color:#777">Generado el ${esc(fdate(hoy()))} · Sinner Construcciones</div></div>`}
 function imprimirHtml(html){const w=document.createElement("div");w.id="printArea";w.innerHTML=html;document.body.appendChild(w);
-  document.body.classList.add("imprimiendo");setTimeout(()=>{window.print();setTimeout(()=>{w.remove();document.body.classList.remove("imprimiendo")},500)},150)}
+  document.body.classList.add("imprimiendo");const imgs=[...w.querySelectorAll("img")];
+  Promise.race([Promise.all(imgs.map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))),new Promise(r=>setTimeout(r,8000))]).then(()=>setTimeout(()=>{window.print();setTimeout(()=>{w.remove();document.body.classList.remove("imprimiendo")},500)},150))}
+
+
+/* ---------- fotos de bitácora ---------- */
+function achicarFoto(file,max=1600,q=0.75){return new Promise((ok,no)=>{const img=new Image(),u=URL.createObjectURL(file);
+  img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight;const k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
+    const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);URL.revokeObjectURL(u);
+    c.toBlob(b=>b?ok(b):no(new Error("foto")),"image/jpeg",q)};
+  img.onerror=()=>{URL.revokeObjectURL(u);no(new Error("foto"))};img.src=u})}
+const _fotoUrl={};
+async function urlsFotos(paths){const falta=paths.filter(p=>!_fotoUrl[p]||_fotoUrl[p].t<Date.now()-50*60e3);
+  if(falta.length&&sb){try{const {data}=await sb.storage.from("legajos").createSignedUrls(falta,3600);(data||[]).forEach(r=>{if(r.signedUrl)_fotoUrl[r.path]={u:r.signedUrl,t:Date.now()}})}catch(_){}}
+  const o={};paths.forEach(p=>{if(_fotoUrl[p])o[p]=_fotoUrl[p].u});return o}
