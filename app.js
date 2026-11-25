@@ -100,8 +100,8 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="25/11 11:33";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados"];
+const VERSION="25/11 12:38";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -128,7 +128,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,proyeccion:vProyeccion,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -643,14 +643,15 @@ function openEmp(e){
     <label class="f">Nombre<input id="e_nom" value="${esc(e.nombre)}" required></label>
     <div class="two"><label class="f">Cobra<select id="e_tipo"><option value="jornal" ${e.tipo!=="fijo"?"selected":""}>Por jornal (día)</option><option value="fijo" ${e.tipo==="fijo"?"selected":""}>Sueldo fijo semanal</option></select></label>
     <label class="f" id="w_jor">Jornal por día $<input id="e_jor" inputmode="decimal" value="${esc(e.jornal||"")}"></label>
-    <label class="f" id="w_fij">Sueldo fijo semanal $<input id="e_fij" inputmode="decimal" value="${esc(e.sueldoFijo||"")}"></label>
+    <label class="f" id="w_fij">Sueldo fijo $ (por cada pago)<input id="e_fij" inputmode="decimal" value="${esc(e.sueldoFijo||"")}"></label>
+    <label class="f" id="w_per">Se le paga<select id="e_per">${[["semanal","Todas las semanas (sábado)"],["quincenal","Por quincena (día 15 y fin de mes)"],["mensual","Una vez por mes (fin de mes)"]].map(([k,l])=>`<option value="${k}" ${(e.periodo||"semanal")===k?"selected":""}>${l}</option>`).join("")}</select></label>
     <label class="f">Estado<select id="e_act"><option value="1" ${e.activo!==false?"selected":""}>Activo</option><option value="0" ${e.activo===false?"selected":""}>Ya no trabaja</option></select></label></div>
     <label class="f">Notas<input id="e_not" value="${esc(e.notas||"")}" placeholder="Ej: oficial, ayudante, CUIL…"></label>
     ${footBtns(ed&&!S.liqs.some(l=>(l.filas||[]).some(f=>f.empId===e.id)))}</form>`,sh=>{
     wireCommon(sh,"empleados",e.id);
     const upd=()=>{const f=$("#e_tipo").value==="fijo";$("#w_jor").style.display=f?"none":"";$("#w_fij").style.display=f?"":"none"};$("#e_tipo").onchange=upd;upd();
     $("#fe").onsubmit=async ev=>{ev.preventDefault();const n=$("#e_nom").value.trim();if(!n)return toast("Falta el nombre");
-      if(await save("empleados",e.id,{nombre:n,tipo:$("#e_tipo").value,jornal:num($("#e_jor").value),sueldoFijo:num($("#e_fij").value),activo:$("#e_act").value==="1",notas:$("#e_not").value.trim(),creado:e.creado})){closeSheet();toast("Empleado guardado")}};
+      if(await save("empleados",e.id,{nombre:n,tipo:$("#e_tipo").value,jornal:num($("#e_jor").value),sueldoFijo:num($("#e_fij").value),periodo:$("#e_per").value,activo:$("#e_act").value==="1",notas:$("#e_not").value.trim(),creado:e.creado})){closeSheet();toast("Empleado guardado")}};
   });
 }
 function openAdel(){
@@ -839,6 +840,7 @@ function bindView(v){
   if(v==="usd")bindUsd(V);
   if(v==="tarjetas")bindTarjetas(V);
   if(v==="encargados")bindEncargados(V);
+  if(v==="proyeccion")bindProyeccion(V);
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
@@ -1546,6 +1548,7 @@ function vLegajo(){
   const egTot=r.gastos+r.costoJ;
   const linea=m=>`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria||"Movimiento")}</span><span class="s">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}${m.usd?" · "+fmtU(m.usd)+(esUsd(m)?" pagados en dólares":m.cotizacion?" a "+fmt(m.cotizacion):""):""}</span><span class="m">${fmt(valorPesos(m))}</span></button>`;
   const rubros=Object.entries(rub).sort((a,b)=>tot(b[1])-tot(a[1]));
+  const planH=isAdmin()?planObraHtml(o):"";
   const ultB=S.bit.filter(b=>b.obra===o.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,5);
   return `<div class="row between"><button class="btn sm" data-go="obras">← Obras</button><button class="btn sm" id="legEdit">Editar datos de la obra</button></div>
   <section class="card" style="display:flex;flex-direction:column;gap:6px">
@@ -1564,12 +1567,15 @@ function vLegajo(){
     <details class="grpd"><summary><span>Mano de obra <span class="note">(${r.cantJ} jornales)</span></span><b>${fmt(r.costoJ)}</b></summary><p class="note" style="margin:0 0 10px">Sale de lo pagado en Sueldos a esta obra; los días sin sueldo pagado se calculan con jornales × costo del jornal. El detalle por día está en Jornales.</p></details>
     ${!rubros.length&&!r.costoJ?`<div class="empty">Todavía no hay gastos cargados para esta obra.</div>`:""}</section>
   ${archivosHtml(o.id,LEG_CATS,"Archivos del legajo","en esta obra")}
+  ${planH}
   <section class="card"><h3 style="margin-bottom:8px">Bitácora reciente</h3>
     ${ultB.length?`<div class="list">${ultB.map(b=>`<button class="item" data-edit-bit="${esc(b.id)}"><span class="t">${esc(fdate(b.fecha))}</span><span class="s">${b.motivo&&b.trabajo!=="si"?esc(b.motivo)+" — ":""}${esc(b.detalle||"")}</span><span class="m">${pillTrab(b.trabajo)}</span></button>`).join("")}</div>`:`<div class="empty">Sin registros de bitácora.</div>`}</section>`;
 }
 function bindLegajo(){
   const o=S.obras.find(x=>x.id===S.legObra);if(!o)return;
   const e=$("#legEdit");if(e)e.onclick=()=>openObra(o);
+  document.querySelectorAll("[data-pobra]").forEach(x=>x.onclick=()=>openItemProy(null,{tipo:x.dataset.pobra,obra:o.id}));
+  document.querySelectorAll("#view [data-ped]").forEach(x=>x.onclick=()=>openItemProy(proy().items.find(i=>i.id===x.dataset.ped)));
   const s=$("#legSrch");if(s)s.onclick=()=>{S.q={t:o.nombre,desde:"",hasta:"",que:"movs"};location.hash="buscar"};
   bindArchivos(o.id,LEG_CATS);
 }
@@ -1719,7 +1725,7 @@ async function cargarTabla(t){
   let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);
     if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}  /* la tabla todavía no existe: la app sigue andando */
     if(error)throw error;all=all.concat(data);if(data.length<1000)break}
-  if(t==="config"){const g=all.find(r=>r.id==="general");if(g){const d=g.data;(d.cajasExtra||[]).forEach(c=>{if(c&&!CAJAS.includes(c))CAJAS.push(c)});S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
+  if(t==="config"){const pr=all.find(r=>r.id==="proyeccion");S.proy=pr?pr.data:null;const g=all.find(r=>r.id==="general");if(g){const d=g.data;(d.cajasExtra||[]).forEach(c=>{if(c&&!CAJAS.includes(c))CAJAS.push(c)});S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
     const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
@@ -1916,7 +1922,7 @@ function menuItems(){
   if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"]]]];
   return [
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
-    ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
+    ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["proyeccion","📈","Proyección de pagos"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
     ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["encargados","🦺","Encargados"],["presupuestos","📐","Precios y presupuestos"]]],
     ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
 }
@@ -2512,3 +2518,166 @@ function openNuevoEnc(op={}){
   openSheet(`<form id="ne" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Nuevo encargado")}${camposEnc(op)}<button class="btn pri" type="submit">Crear encargado</button></form>`,sh=>{
     sh.querySelector("[data-close]").onclick=closeSheet;prepCamposEnc(sh);
     $("#ne").onsubmit=async ev=>{ev.preventDefault();const nu=await crearEnc(sh);if(nu){closeSheet();if(op.alTerminar)op.alTerminar(nu)}}})}
+
+
+/* ---------- proyección de pagos (solo administración) ---------- */
+const RUB_PROY_E=["Materiales","Mano de obra / subcontrato","Viáticos y combustible","Alquiler y servicios","Impuestos","Seguros","Profesionales","Préstamos y cuotas","Otros"];
+const RUB_PROY_I=["Anticipo","Certificado","Pago de cliente","Préstamo / aporte","Otros"];
+const FREC=[["una","Una sola vez"],["semanal","Todas las semanas"],["quincenal","Cada 15 días"],["mensual","Todos los meses"],["cuotas","En cuotas mensuales"]];
+const proy=()=>({items:[],cot:0,sueldos:true,tarjDia:10,saldoIni:{},...(S.proy||{})});
+async function guardarProy(P){await db.doc("config/proyeccion").set(P);S.proy=P}
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const dt=f=>new Date(f+"T12:00");
+function finSemana(f){const d=dt(f);d.setDate(d.getDate()+((6-d.getDay()+7)%7));return iso(d)}
+function iniSemana(sab){const d=dt(sab);d.setDate(d.getDate()-6);return iso(d)}
+function addDias(f,n){const d=dt(f);d.setDate(d.getDate()+n);return iso(d)}
+function mismoDia(ym,dia){const [y,m]=ym.split("-").map(Number);const u=new Date(y,m,0).getDate();return ym+"-"+String(Math.min(dia,u)).padStart(2,"0")}
+function ocurrencias(it,a,b){const out=[];if(!it.fecha)return out;const fin=it.hasta&&it.hasta<b?it.hasta:b;
+  const push=f=>{if(f>=a&&f<=fin)out.push(f)};
+  if(it.frec==="una"||!it.frec)push(it.fecha);
+  else if(it.frec==="semanal"||it.frec==="quincenal"){const st=it.frec==="semanal"?7:14;for(let f=it.fecha;f<=fin;f=addDias(f,st))push(f)}
+  else{const dia=+it.fecha.slice(8);let ym=it.fecha.slice(0,7),k=0;const n=it.frec==="cuotas"?Math.max(1,+it.cuotas||1):9999;
+    while(k<n){const f=mismoDia(ym,dia);if(f>fin)break;push(f);ym=sigMes(ym);k++}}
+  return out}
+function valorProy(it,P){return it.moneda==="USD"?(+it.monto||0)*(+P.cot||0):(+it.monto||0)}
+function sueldosEstimados(){const L=[...(S.liqs||[])].filter(l=>l.filas&&l.filas.length).sort((a,b)=>(b.desde||"").localeCompare(a.desde||"")).slice(0,4);
+  if(!L.length)return {obras:{},fijos:0,n:0};const ob={};let fij=0;
+  for(const l of L)for(const f of l.filas){const v=+f.total||+f.saldo||0;if(f.tipo==="fijo")fij+=v;else{const k=f.obra||"_jornales";ob[k]=(ob[k]||0)+v}}
+  Object.keys(ob).forEach(k=>ob[k]=Math.round(ob[k]/L.length));return {obras:ob,fijos:Math.round(fij/L.length),n:L.length}}
+/* todas las líneas (pagos e ingresos) entre a y b */
+function lineasProy(a,b){const P=proy(),out=[];
+  for(const it of P.items)for(const f of ocurrencias(it,a,b))out.push({k:it.id+"|"+f,it,f,tipo:it.tipo,obra:it.obra||"_admin",grupo:it.tipo==="ingreso"?"ing":(it.obra&&it.obra!=="_admin"?"obra":"admin"),concepto:it.concepto,rubro:it.rubro,monto:valorProy(it,P),usd:it.moneda==="USD"?+it.monto:0,pagado:!!(it.pagos||{})[f]});
+  if(P.sueldos){const E=sueldosEstimados();if(E.n)for(let sab=finSemana(a);sab<=b;sab=addDias(sab,7)){
+    for(const [o,v] of Object.entries(E.obras))if(v)out.push({k:"sj|"+o+"|"+sab,f:sab,tipo:"egreso",obra:o,grupo:"sueldos",concepto:"Sueldos jornaleros (estimado)",rubro:"Sueldos",monto:v,auto:true})}
+    for(const e of (S.emp||[]).filter(e=>e.tipo==="fijo"&&e.activo!==false&&+e.sueldoFijo)){const per=e.periodo||"semanal";let fs=[];
+      if(per==="semanal")for(let sab=finSemana(a);sab<=b;sab=addDias(sab,7))fs.push(sab);
+      else{for(let ym=a.slice(0,7);ym<=b.slice(0,7);ym=sigMes(ym)){if(per==="quincenal")fs.push(ym+"-15");fs.push(mismoDia(ym,31))}fs=fs.filter(f=>f>=a&&f<=b)}
+      for(const f of fs)out.push({k:"sf|"+e.id+"|"+f,f,tipo:"egreso",obra:"_sueldos",grupo:"sueldos",concepto:`Sueldo ${e.nombre}${per==="quincenal"?(f.slice(8)==="15"?" (1ª quincena)":" (2ª quincena)"):per==="mensual"?" (mes)":""}`,rubro:"Sueldos",monto:+e.sueldoFijo,auto:true})}}
+  for(const l of out){const v=(P.aj||{})[l.k];if(v!=null&&v!==""){l.orig=l.monto;l.monto=+v;l.ajustado=true}}
+  const dia=+P.tarjDia||10;
+  for(const m of S.movs.filter(x=>x.pago==="tarjeta"))for(const c of cuotasDe(m)){const f=mismoDia(c.mes,dia);if(f>=a&&f<=b)out.push({k:"tj|"+m.id+"|"+c.n,f,tipo:"egreso",obra:m.obra||"_empresa",grupo:"tarjeta",concepto:`${m.tarjeta||"Tarjeta"}: ${m.detalle||m.categoria||"compra"} (cuota ${c.n} de ${c.de})`,rubro:"Tarjeta",monto:c.monto,auto:true})}
+  return out.sort((x,y)=>x.f.localeCompare(y.f)||(x.tipo==="ingreso")-(y.tipo==="ingreso"))}
+const GRUPOS=[["sueldos","Sueldos"],["obra","Gastos de obras"],["admin","Administrativos"],["tarjeta","Tarjeta"]];
+function vProyeccion(){
+  if(!isAdmin())return `<div class="empty">Solo administración.</div>`;
+  const P=proy(),sab=S.filt.psem||finSemana(hoy()),ini=iniSemana(sab),gf=S.filt.pgrp||"";
+  const L=lineasProy(ini,sab),E=L.filter(l=>l.tipo==="egreso"),I=L.filter(l=>l.tipo==="ingreso");
+  const tot=x=>x.reduce((a,l)=>a+l.monto,0),te=tot(E),ti=tot(I);
+  const usdSin=P.items.some(it=>it.moneda==="USD")&&!+P.cot;
+  const nomO=o=>o==="_admin"?"Administrativo":o==="_sueldos"?"Sueldos fijos":o==="_jornales"?"Sin obra":obraNombre(o);
+  const linea=l=>`<div class="item" style="cursor:default;grid-template-columns:minmax(0,1fr) auto;align-items:center;${l.pagado?"opacity:.55":""}">
+    <span><span class="t" style="${l.pagado?"text-decoration:line-through":""}">${esc(l.concepto||l.rubro||"—")}</span><br><span class="s">${esc(fdia(l.f))} · ${esc(nomO(l.obra))}${l.rubro&&!l.auto?" · "+esc(l.rubro):""}${l.usd?" · "+fmtU(l.usd):""}</span></span>
+    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><button class="btn sm" data-paj="${esc(l.k)}" title="Cambiar el monto solo de esta semana" style="font-weight:700" ><span class="${l.tipo==="ingreso"?"pos":""}">${fmt(l.monto)}</span> ✎</button>${l.ajustado?`<span class="note" style="margin:0">ajustado (era ${fmt(l.orig)})</span>`:""}${l.auto?"":`<span style="display:flex;gap:4px"><button class="btn sm" data-pok="${esc(l.k)}">${l.pagado?"Desmarcar":l.tipo==="ingreso"?"✓ Cobrado":"✓ Pagado"}</button><button class="btn sm" data-ped="${esc(l.it.id)}">Editar</button></span>`}</span></div>`;
+  const EG=gf?E.filter(l=>l.grupo===gf):E;
+  return `<div class="row between"><h2>Proyección de pagos</h2><button class="btn sm" id="pr_cfg">Ajustes</button></div>
+  ${usdSin?`<div class="banner">Hay montos en dólares: poné en Ajustes la cotización para proyectar.</div>`:""}
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center"><button class="btn sm" data-pmov="-1" aria-label="Semana anterior">‹</button><b style="text-align:center">${sab===finSemana(hoy())?"Esta semana":"Semana"}<br><span class="note" style="font-weight:400">dom ${esc(fdate(ini).slice(0,5))} al sáb ${esc(fdate(sab).slice(0,5))}</span></b><button class="btn sm" data-pmov="1" aria-label="Semana siguiente">›</button></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px">
+    <section class="card stat" style="margin:0"><div class="lbl">Hay que pagar</div><div class="num neg" style="font-size:26px">${fmt(te)}</div><div class="note" style="margin:0">${E.length} pago${E.length===1?"":"s"} en la semana</div></section>
+    <section class="card stat" style="margin:0"><div class="lbl">Cobro esperado</div><div class="num pos">${fmt(ti)}</div><div class="note" style="margin:0">${I.length?I.map(l=>esc(nomO(l.obra))).filter((x,i,a)=>a.indexOf(x)===i).join(", "):"Ninguno cargado"}</div></section></div>
+  <div class="grid">${GRUPOS.map(([k,l])=>`<button class="card stat" data-pgrp="${k}" style="cursor:pointer;text-align:left;margin:0;${gf===k?"outline:2px solid var(--acc);":""}"><div class="lbl">${l}</div><div class="num" style="font-size:17px">${fmt(tot(E.filter(x=>x.grupo===k)))}</div></button>`).join("")}</div>
+  <section class="card"><div class="row between"><h3>${gf?esc(GRUPOS.find(g=>g[0]===gf)[1]):"Pagos de la semana"}</h3>${gf?`<button class="btn sm" data-pgrp="">Ver todos ✕</button>`:""}</div>
+    <div class="list" style="margin-top:6px">${EG.map(linea).join("")||`<div class="empty">No hay pagos proyectados para esta semana.</div>`}</div>
+    ${I.length?`<h3 style="margin-top:12px">Cobros esperados</h3><div class="list" style="margin-top:6px">${I.map(linea).join("")}</div>`:""}
+    <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn pri sm" data-pnew="egreso">+ Pago</button><button class="btn sm" data-pnew="ingreso">+ Cobro esperado</button><button class="btn sm" id="pr_admin">Administrativos (${P.items.filter(i=>i.obra==="_admin"&&i.tipo==="egreso").length})</button></div></section>
+  ${tablaMesProy()}`}
+function fdia(f){return ["dom","lun","mar","mié","jue","vie","sáb"][dt(f).getDay()]+" "+fdate(f).slice(0,5)}
+function tablaMesProy(){
+  const P=proy(),mes=S.filt.pmes||hoy().slice(0,7),[y,m]=mes.split("-").map(Number);
+  const prim=finSemana(mes+"-01"),ult=mismoDia(mes,31);const sabs=[];for(let s2=prim;s2.slice(0,7)===mes||s2<=ult;s2=addDias(s2,7)){if(s2.slice(0,7)!==mes)break;sabs.push(s2)}
+  const L=lineasProy(iniSemana(sabs[0]),sabs[sabs.length-1]);
+  const obrasE=[...new Set(L.filter(l=>l.tipo==="egreso"&&(l.grupo==="obra"||l.grupo==="sueldos"&&l.obra!=="_sueldos"||l.grupo==="tarjeta"&&!l.obra.startsWith("_"))).map(l=>l.obra))];
+  const obrasI=[...new Set(L.filter(l=>l.tipo==="ingreso").map(l=>l.obra))];
+  const colE=[...obrasE.map(o=>[o,obraNombre(o),l=>l.obra===o&&!(l.grupo==="sueldos"&&l.obra==="_sueldos")]),["_sf","Sueldos fijos",l=>l.obra==="_sueldos"],["_adm","Administrativos",l=>l.grupo==="admin"],["_tj","Tarjeta (empresa)",l=>l.grupo==="tarjeta"&&l.obra.startsWith("_")]];
+  const colI=obrasI.map(o=>[o,o==="_admin"?"Otros":obraNombre(o)]);
+  let acc=+((P.saldoIni||{})[mes])||0;const T={e:{},i:{},te:0,ti:0};
+  const td="padding:5px 7px;text-align:right;border-top:1px solid var(--line);white-space:nowrap";
+  const filas=sabs.map((sab,n)=>{const W=L.filter(l=>l.f>=iniSemana(sab)&&l.f<=sab),E=W.filter(l=>l.tipo==="egreso"),I=W.filter(l=>l.tipo==="ingreso");
+    const ce=colE.map(([k,,fn])=>{const v=E.filter(fn).reduce((a,l)=>a+l.monto,0);T.e[k]=(T.e[k]||0)+v;return v});
+    const ci=colI.map(([o])=>{const v=I.filter(l=>l.obra===o).reduce((a,l)=>a+l.monto,0);T.i[o]=(T.i[o]||0)+v;return v});
+    const te=ce.reduce((a,b)=>a+b,0),ti=ci.reduce((a,b)=>a+b,0),sd=ti-te;acc+=sd;T.te+=te;T.ti+=ti;
+    const c=v=>v?fmt(v):"–";
+    return `<tr style="${acc<0?"background:color-mix(in srgb,var(--bad) 10%,transparent)":""}"><td style="padding:5px 7px;border-top:1px solid var(--line);white-space:nowrap;position:sticky;left:0;background:var(--card)"><b>Semana ${n+1}</b><br><span class="note">${esc(fdate(iniSemana(sab)).slice(0,5))} al ${esc(fdate(sab).slice(0,5))}</span></td>
+      ${ce.map(v=>`<td style="${td}">${c(v)}</td>`).join("")}<td style="${td};font-weight:700" class="neg">${c(te)}</td>${ci.map(v=>`<td style="${td}">${c(v)}</td>`).join("")}<td style="${td};font-weight:700" class="pos">${c(ti)}</td>
+      <td style="${td}" class="${sd<0?"neg":"pos"}">${fmt(sd)}</td><td style="${td};font-weight:700" class="${acc<0?"neg":""}">${fmt(acc)}</td></tr>`}).join("");
+  const th="padding:5px 7px;font-weight:600;white-space:nowrap;text-align:right";
+  const meses=[...new Set([hoy().slice(0,7),sigMes(hoy().slice(0,7)),sigMes(hoy().slice(0,7),2),mes])].sort();
+  return `<section class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div class="row between" style="gap:8px;flex-wrap:wrap"><h3>Proyección del mes</h3><div class="row" style="gap:6px"><select id="pr_mes">${meses.map(x=>`<option value="${x}" ${x===mes?"selected":""}>${esc(mlabel(x))}</option>`).join("")}</select><button class="btn sm" id="pr_print">🖨️ Imprimir</button></div></div>
+    <label class="f" style="max-width:260px">Saldo inicial del mes (opcional)<input id="pr_sini" inputmode="numeric" value="${(P.saldoIni||{})[mes]?esc(fmt(P.saldoIni[mes])):""}" placeholder="$ 0"></label>
+    <div id="pr_tabla" style="overflow-x:auto"><table style="border-collapse:collapse;font-size:13px;min-width:100%">
+    <thead><tr><th rowspan="2" style="text-align:left;padding:5px 7px;position:sticky;left:0;background:var(--card)">Semana</th><th colspan="${colE.length+1}" class="neg" style="padding:5px 7px;border-left:1px solid var(--line)">Egresos</th><th colspan="${colI.length+1}" class="pos" style="padding:5px 7px;border-left:1px solid var(--line)">Ingresos</th><th colspan="2" style="padding:5px 7px;border-left:1px solid var(--line)">Saldo</th></tr>
+    <tr class="note">${colE.map(c=>`<th style="${th}">${esc(c[1])}</th>`).join("")}<th style="${th}" class="neg">Total</th>${colI.map(c=>`<th style="${th}">${esc(c[1])}</th>`).join("")}<th style="${th}" class="pos">Total</th><th style="${th}">Semana</th><th style="${th}">Acumulado</th></tr></thead>
+    <tbody>${filas}<tr style="background:var(--soft)"><td style="padding:5px 7px;font-weight:700;border-top:2px solid var(--line);position:sticky;left:0;background:var(--soft)">Total del mes</td>
+      ${colE.map(([k])=>`<td style="${td};font-weight:700">${fmt(T.e[k]||0)}</td>`).join("")}<td style="${td};font-weight:700" class="neg">${fmt(T.te)}</td>${colI.map(([o])=>`<td style="${td};font-weight:700">${fmt(T.i[o]||0)}</td>`).join("")}<td style="${td};font-weight:700" class="pos">${fmt(T.ti)}</td><td style="${td};font-weight:700">${fmt(T.ti-T.te)}</td><td style="${td};font-weight:700">${fmt(acc)}</td></tr></tbody></table></div>
+    <p class="note" style="margin:0">Semanas de domingo a sábado. La fila en rojo es la semana en que el acumulado no alcanza.${P.sueldos?" Jornaleros: promedio de las últimas 4 planillas. Sueldos fijos: según la ficha de cada empleado (semanal, quincena o mensual).":""} Cualquier monto se puede cambiar solo para una semana tocando el lápiz ✎.</p></section>`}
+function bindProyeccion(V){
+  V.querySelectorAll("[data-pmov]").forEach(b=>b.onclick=()=>{S.filt.psem=addDias(S.filt.psem||finSemana(hoy()),7*+b.dataset.pmov);render()});
+  V.querySelectorAll("[data-pgrp]").forEach(b=>b.onclick=()=>{S.filt.pgrp=S.filt.pgrp===b.dataset.pgrp?"":b.dataset.pgrp;render()});
+  V.querySelectorAll("[data-pnew]").forEach(b=>b.onclick=()=>openItemProy(null,{tipo:b.dataset.pnew}));
+  V.querySelectorAll("[data-ped]").forEach(b=>b.onclick=()=>openItemProy(proy().items.find(i=>i.id===b.dataset.ped)));
+  V.querySelectorAll("[data-pok]").forEach(b=>b.onclick=async()=>{const [id,f]=b.dataset.pok.split("|");const P=proy();const it=P.items.find(i=>i.id===id);if(!it)return;
+    it.pagos={...(it.pagos||{})};if(it.pagos[f])delete it.pagos[f];else it.pagos[f]=true;try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}});
+  V.querySelectorAll("[data-paj]").forEach(b=>b.onclick=async()=>{const k=b.dataset.paj,P=proy();const actual=(P.aj||{})[k];
+    const v=prompt("Monto para ESTA semana solamente.\nDejalo vacío para volver al monto original.",actual!=null?String(actual):"");if(v===null)return;
+    P.aj={...(P.aj||{})};if(v.trim()==="")delete P.aj[k];else P.aj[k]=num(v)||0;try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}});
+  const a=V.querySelector("#pr_admin");if(a)a.onclick=openAdminProy;
+  const c=V.querySelector("#pr_cfg");if(c)c.onclick=openCfgProy;
+  const m=V.querySelector("#pr_mes");if(m)m.onchange=()=>{S.filt.pmes=m.value;render()};
+  const si=V.querySelector("#pr_sini");if(si)si.onchange=async()=>{const P=proy();P.saldoIni={...(P.saldoIni||{}),[S.filt.pmes||hoy().slice(0,7)]:num(si.value)||0};try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}};
+  const pp=V.querySelector("#pr_print");if(pp)pp.onclick=()=>{const mes=S.filt.pmes||hoy().slice(0,7);const logo=(document.querySelector("img.logo")||{}).src||"";
+    imprimirHtml(`<style>@page{size:A4 landscape;margin:10mm}</style><div style="font:11px/1.35 system-ui,sans-serif;color:#111"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:8px"><div style="font-size:17px;font-weight:700">Proyección semanal de egresos e ingresos · ${esc(mlabel(mes))}</div>${logo?`<img src="${logo}" style="height:40px">`:""}</div>${$("#pr_tabla").innerHTML.replace(/position:sticky;left:0;background:var\(--(card|soft)\)/g,"").replace(/<td/g,'<td style="border:1px solid #ccc"').replace(/<td style="border:1px solid #ccc" style="/g,'<td style="border:1px solid #ccc;')}
+      <div style="display:flex;justify-content:space-between;gap:30px;margin-top:40px"><div style="flex:1;border-top:1px solid #111;padding-top:4px">Observaciones</div><div style="width:28%;border-top:1px solid #111;padding-top:4px;text-align:center">Firma administración</div><div style="width:28%;border-top:1px solid #111;padding-top:4px;text-align:center">Aprobó (firma y aclaración)</div></div></div>`)};
+}
+function openItemProy(it,pre={}){const e=!!it;it=it||{tipo:"egreso",obra:pre.obra||"",frec:"una",fecha:hoy(),moneda:"ARS",...pre};
+  const ing=()=>$("#pi_tipo").value==="ingreso";
+  const obrasOpt=sortObras(S.obras).filter(o=>!o.id.startsWith("_")&&o.estado!=="Terminada"||o.id===it.obra);
+  openSheet(`<form id="fpi" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar":it.tipo==="ingreso"?"Cobro esperado":"Pago a proyectar")}
+    <div class="two"><label class="f">Tipo<select id="pi_tipo"><option value="egreso" ${it.tipo!=="ingreso"?"selected":""}>Pago (egreso)</option><option value="ingreso" ${it.tipo==="ingreso"?"selected":""}>Cobro (ingreso)</option></select></label>
+    <label class="f">Obra<select id="pi_obra"><option value="_admin" ${it.obra==="_admin"||!it.obra?"selected":""}>Administrativo / empresa (no es de una obra)</option>${obrasOpt.map(o=>`<option value="${esc(o.id)}" ${o.id===it.obra?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></label></div>
+    <label class="f">Concepto<input id="pi_con" value="${esc(it.concepto||"")}" placeholder="Ej: hierro del 8 · alquiler galpón · certificado 3" required></label>
+    <div class="two"><label class="f">Rubro<select id="pi_rub"></select></label>
+    <label class="f">Monto<span class="row" style="gap:6px"><select id="pi_mon" style="width:90px"><option value="ARS" ${it.moneda!=="USD"?"selected":""}>$</option><option value="USD" ${it.moneda==="USD"?"selected":""}>US$</option></select><input id="pi_monto" inputmode="decimal" value="${it.monto?esc(String(it.monto)):""}" required style="flex:1"></span></label>
+    <label class="f">Cada cuánto<select id="pi_frec">${FREC.map(([k,l])=>`<option value="${k}" ${it.frec===k?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="f" id="w_cuo">Cantidad de cuotas<input id="pi_cuo" inputmode="numeric" value="${esc(String(it.cuotas||""))}"></label>
+    <label class="f"><span id="l_fecha">Fecha</span><input type="date" id="pi_fecha" value="${esc(it.fecha||hoy())}" required></label>
+    <label class="f" id="w_hasta">Hasta (opcional)<input type="date" id="pi_hasta" value="${esc(it.hasta||"")}"></label></div>
+    <label class="f">Nota<input id="pi_nota" value="${esc(it.nota||"")}"></label>
+    <div class="row between">${e?`<button type="button" class="btn danger" id="pi_del">Borrar</button>`:"<span></span>"}<button class="btn pri" type="submit">Guardar</button></div></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    const upd=()=>{const R0=ing()?RUB_PROY_I:RUB_PROY_E,cur0=$("#pi_rub").value||it.rubro;$("#pi_rub").innerHTML=R0.map(r=>`<option ${r===cur0?"selected":""}>${r}</option>`).join("");
+      const f=$("#pi_frec").value;$("#w_cuo").style.display=f==="cuotas"?"":"none";$("#w_hasta").style.display=f==="una"||f==="cuotas"?"none":"";$("#l_fecha").textContent=f==="una"?"Fecha":"Primera fecha"};
+    $("#pi_tipo").onchange=upd;$("#pi_frec").onchange=upd;upd();
+    if(e)$("#pi_del").onclick=async ev=>{const b=ev.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Tocá de nuevo para borrar";return}const P=proy();P.items=P.items.filter(x=>x.id!==it.id);try{await guardarProy(P);closeSheet();toast("Borrado");render()}catch(err){toast(errMsg(err))}};
+    $("#fpi").onsubmit=async ev=>{ev.preventDefault();const monto=num($("#pi_monto").value);if(!monto)return toast("Falta el monto");
+      const d={id:it.id||("p"+Date.now()),tipo:$("#pi_tipo").value,obra:$("#pi_obra").value,concepto:$("#pi_con").value.trim(),rubro:$("#pi_rub").value,moneda:$("#pi_mon").value,monto,frec:$("#pi_frec").value,cuotas:num($("#pi_cuo").value)||0,fecha:$("#pi_fecha").value,hasta:$("#pi_hasta").value,nota:$("#pi_nota").value.trim(),pagos:it.pagos||{},creado:it.creado||Date.now()};
+      const P=proy();P.items=[...P.items.filter(x=>x.id!==d.id),d];try{await guardarProy(P);closeSheet();toast("Guardado");render()}catch(err){toast(errMsg(err))}};
+  })}
+function openAdminProy(){const P=proy(),L=P.items.filter(i=>i.obra==="_admin"&&i.tipo==="egreso").sort((a,b)=>(a.concepto||"").localeCompare(b.concepto||""));
+  const fr=i=>{const f=FREC.find(x=>x[0]===i.frec);return (f?f[1]:"")+(i.frec==="mensual"||i.frec==="cuotas"?" · día "+(+i.fecha.slice(8)):"")+(i.frec==="cuotas"?` · ${i.cuotas} cuotas`:"")+(i.frec==="una"?" · "+fdate(i.fecha):"")};
+  const mensual=L.reduce((a,i)=>a+(i.frec==="mensual"||i.frec==="cuotas"?valorProy(i,P):i.frec==="semanal"?valorProy(i,P)*52/12:i.frec==="quincenal"?valorProy(i,P)*26/12:0),0);
+  openSheet(`<div style="display:flex;flex-direction:column;gap:10px">${sheetHead("Gastos administrativos")}
+    <p class="note" style="margin:0">Gastos que no pasan por las cajas de la app: alquiler, servicios, impuestos, seguros, contadora, préstamos… Se cargan una vez y caen solos en la semana que vencen.</p>
+    <div class="list">${L.map(i=>`<button class="item" data-pai="${esc(i.id)}"><span class="t">${esc(i.concepto)}</span><span class="s">${esc(i.rubro||"")} · ${esc(fr(i))}</span><span class="m">${i.moneda==="USD"?fmtU(i.monto):fmt(i.monto)}</span></button>`).join("")||`<div class="empty">Todavía no hay gastos administrativos.</div>`}</div>
+    ${L.length?`<div class="row between"><b>Aproximado por mes</b><b>${fmt(Math.round(mensual))}</b></div>`:""}
+    <button class="btn pri" id="pai_new">+ Agregar gasto administrativo</button></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    sh.querySelectorAll("[data-pai]").forEach(b=>b.onclick=()=>openItemProy(P.items.find(i=>i.id===b.dataset.pai)));
+    $("#pai_new").onclick=()=>openItemProy(null,{tipo:"egreso",obra:"_admin",frec:"mensual"})})}
+function openCfgProy(){const P=proy();
+  openSheet(`<form id="fpc" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Ajustes de la proyección")}
+    <label class="f">Cotización para proyectar los montos en dólares<input id="pc_cot" inputmode="numeric" value="${P.cot?esc(String(P.cot)):""}" placeholder="Ej: 1625"></label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pc_sue" ${P.sueldos?"checked":""}> Sumar los sueldos: jornaleros (promedio de las últimas 4 planillas, cada sábado) y fijos (según la ficha de cada empleado)</label>
+    <label class="f">Día del mes en que vence la tarjeta<input id="pc_tj" inputmode="numeric" value="${esc(String(P.tarjDia||10))}"></label>
+    <button class="btn pri" type="submit">Guardar</button></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    $("#fpc").onsubmit=async ev=>{ev.preventDefault();const Q={...P,cot:num($("#pc_cot").value)||0,sueldos:$("#pc_sue").checked,tarjDia:Math.min(31,Math.max(1,num($("#pc_tj").value)||10))};try{await guardarProy(Q);closeSheet();toast("Guardado");render()}catch(e){toast(errMsg(e))}}})}
+/* plan de la obra (en el legajo) */
+function planObraHtml(o){const P=proy(),L=P.items.filter(i=>i.obra===o.id).sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
+  const lin=i=>`<button class="item" data-ped="${esc(i.id)}"><span class="t">${esc(i.concepto||i.rubro)}</span><span class="s">${esc(fdate(i.fecha))}${i.frec&&i.frec!=="una"?" · "+esc(FREC.find(f=>f[0]===i.frec)[1].toLowerCase()):""}${i.rubro?" · "+esc(i.rubro):""}</span><span class="m ${i.tipo==="ingreso"?"pos":""}">${i.moneda==="USD"?fmtU(i.monto):fmt(i.monto)}</span></button>`;
+  const E=L.filter(i=>i.tipo==="egreso"),I=L.filter(i=>i.tipo==="ingreso");
+  return `<section class="card"><div class="row between"><h3>Plan de pagos y cobros</h3><a href="#proyeccion" class="note">Ver proyección ›</a></div>
+    <p class="note" style="margin:4px 0 8px">Lo que se va a pagar y cobrar en esta obra. Alimenta la proyección semanal.</p>
+    <b class="pos">Cobros esperados</b><div class="list" style="margin:4px 0 8px">${I.map(lin).join("")||`<div class="empty">Sin cobros cargados.</div>`}</div>
+    <b class="neg">Pagos a realizar</b><div class="list" style="margin:4px 0 8px">${E.map(lin).join("")||`<div class="empty">Sin pagos cargados.</div>`}</div>
+    <div class="row" style="gap:6px"><button class="btn sm pri" data-pobra="ingreso">+ Cobro</button><button class="btn sm" data-pobra="egreso">+ Pago</button></div></section>`}
