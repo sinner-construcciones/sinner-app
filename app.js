@@ -99,6 +99,14 @@ function resObra(id){
     trab:b.filter(x=>x.trabajo==="si").length,parc:b.filter(x=>x.trabajo==="parcial").length,perd:b.filter(x=>x.trabajo==="no").length}
 }
 
+/* dólares de un cobro: los que entraron en dólares o lo que el cliente nos reconoce (usdRef) */
+const usdCobro=m=>+m.usd||+m.usdRef||0;
+/* saldo del contrato en dólares; los pesos se estiman al blue de hoy */
+function saldoObra(o,r){if(!o.contratoUsd)return null;const c=+o.contratoUsd,u=r.cobrosU,falta=Math.max(0,c-u),blue=num(S.cfg.cotizacion);
+  const sinU=S.movs.filter(m=>m.obra===o.id&&m.tipo==="ingreso"&&!usdCobro(m));
+  return {c,u,falta,pct:c?Math.min(100,Math.round(u/c*100)):0,blue,faltaArs:blue?falta*blue:0,sinU,sinUArs:sinU.reduce((a,m)=>a+valorPesos(m),0)}}
+const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
+
 /* ---------- navegación ---------- */
 const VERSION="25/11 12:52";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
@@ -298,7 +306,9 @@ function vObras(){
     <div class="row between" style="width:100%"><div><div style="font-family:var(--display);font-weight:700;font-size:17px">${esc(o.nombre)}</div><div class="note">${esc(o.encargado||"Sin encargado")}${o.contratoUsd?" · Contrato "+fmtU(o.contratoUsd):""}</div></div>
     <span class="pill ${o.estado==="En curso"?"p-acc":o.estado==="Terminada"?"p-mut":"p-warn"}">${esc(o.estado||"En curso")}</span></div>
     <div class="mini" style="width:100%"><div>Cobrado<b>${fmt(r.cobros)}</b></div><div>Gastos<b>${fmt(r.gastos)}</b></div><div>Jornales<b>${r.cantJ} · ${fmt(r.costoJ)}</b></div><div>Resultado<b style="color:${r.res<0?"var(--bad)":"var(--good)"}">${fmt(r.res)}</b></div></div>
-    <div class="note">Bitácora: ${r.trab} días trabajados · ${r.parc} parciales · ${r.perd} perdidos${pct!==null?` · Cobrado ${pct}% del contrato`:""}</div>
+    ${o.contratoUsd?(()=>{const sd=saldoObra(o,r);return `<div style="width:100%"><div style="height:6px;background:var(--line,#e5e5e5);border-radius:3px;overflow:hidden"><div style="width:${sd.pct}%;height:100%;background:var(--good)"></div></div>
+      <div class="row between note" style="margin:4px 0 0"><span>Cobrado ${fmtU(Math.round(sd.u))} (${sd.pct}%)</span><b style="color:var(--bad)">Falta ${fmtU(Math.round(sd.falta))}${sd.blue?` · ≈ ${fmt(sd.faltaArs)}`:""}</b></div></div>`})():""}
+    <div class="note">Bitácora: ${r.trab} días trabajados · ${r.parc} parciales · ${r.perd} perdidos</div>
    </button>`}).join("")||`<div class="card empty">No hay obras en curso.</div>`}`}
   <div class="fab"><button class="btn pri" data-new="obra">+ Obra</button></div>`;
 }
@@ -952,6 +962,7 @@ function openMov(m,preset){
       <label class="f">¿A cuánto nos lo tomaron?<input id="m_cot" inputmode="decimal" value="${m.cotizacion||S.cfg.cotizacion||""}" placeholder="Precio de cada dólar"></label></div>
       <p class="note" id="m_cotInfo" style="margin:0"></p></div>
     <label class="f" id="wMonto"><span id="lblMonto">Monto en pesos</span><input id="m_monto" inputmode="decimal" value="${esUsd(m)?"":(m.monto||"")}" placeholder="0"></label>
+    <label class="f" id="wUsdRef">Equivale a US$ <span class="note">(lo que el cliente descuenta del contrato)</span><input id="m_usdref" inputmode="decimal" value="${m.usdRef||""}" placeholder="US$"></label>
     <div id="wObra" style="display:flex;flex-direction:column;gap:12px">
       <label class="f">Obra<select id="m_obra"><option value="">Elegí…</option>${obraOpts(m.obra,true)}</select></label>
       <label class="f" id="wRubP">Gasto personal de Federico: ¿de qué?<select id="m_rubp">${RUBROS_FEDE.map(r=>`<option ${m.rubroPersonal===r?"selected":""}>${esc(r)}</option>`).join("")}</select></label>
@@ -987,7 +998,7 @@ function openMov(m,preset){
       sh.querySelectorAll("#segMon button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mon===st.mon));
       $("#segMon").style.display=cb||tc||isEnc()?"none":"";$("#wUsd").style.display=legacyUsd&&st.mon!=="USD"?"":"none";if(st.mon==="USD")st.enUsd=false;
       $("#wDest").style.display=p?"":"none";if($("#wProv"))$("#wProv").style.display=st.tipo==="egreso"?"":"none";$("#wObra").style.display=p||cb?"none":"flex";$("#lblCaja").textContent=p?"De la caja":"Caja";
-      $("#wUsdF").style.display=st.enUsd&&!cb&&!usd?"grid":"none";$("#m_monto").readOnly=false;
+      $("#wUsdF").style.display=st.enUsd&&!cb&&!usd?"grid":"none";$("#wUsdRef").style.display=st.tipo==="ingreso"&&!usd&&!st.enUsd&&!isEnc()?"":"none";$("#m_monto").readOnly=false;
       const soloCambio=st.tipo==="cambio";
       $("#wUsdX").style.display=soloCambio||usd?"":"none";$("#lblUsdX").textContent=soloCambio?"Dólares que cambiaste":"Monto en dólares";
       $("#wMonto").style.display=usd?"none":"";$("#lblMonto").textContent=soloCambio?"Pesos que te dieron":st.tipo==="mover"?"Pesos que pasaste":"Monto en pesos";usdInfo();
@@ -1046,6 +1057,7 @@ function openMov(m,preset){
         if(num(S.cfg.cotizacion))d.cotizacionBlue=num(S.cfg.cotizacion)}
       if(st.tipo==="egreso"&&$("#m_prov")&&$("#m_prov").value)d.proveedorId=$("#m_prov").value;
       if(st.tipo==="egreso"&&$("#wVeh").style.display!=="none"&&$("#m_veh").value)d.vehiculo=$("#m_veh").value;
+      if($("#wUsdRef").style.display!=="none")d.usdRef=num($("#m_usdref").value)||0;
       for(const k of ["empleadoId","liquidacion","usdRef"])if(m[k]!=null&&d[k]==null)d[k]=m[k];
       const rem=!e&&st.tipo==="egreso"&&$("#m_rem")&&$("#m_rem").checked;
       const nid=await save("movimientos",m.id,d);
@@ -1546,7 +1558,12 @@ function vLegajo(){
   const tot=L=>L.reduce((a,m)=>a+valorPesos(m),0);
   const rub={};for(const m of EGR){const k=m.categoria||"Otros";(rub[k]=rub[k]||[]).push(m)}
   const egTot=r.gastos+r.costoJ;
-  const linea=m=>`<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria||"Movimiento")}</span><span class="s">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}${m.usd?" · "+fmtU(m.usd)+(esUsd(m)?" pagados en dólares":m.cotizacion?" a "+fmt(m.cotizacion):""):""}</span><span class="m">${fmt(valorPesos(m))}</span></button>`;
+  const linea=m=>{const ing=m.tipo==="ingreso",uR=!m.usd&&+m.usdRef;
+    const sub=m.usd?" · "+(esUsd(m)?"pagado en dólares":m.cotizacion?"cambio "+fmt(m.cotizacion):""):uR?" · cambio "+fmt(m2(valorPesos(m)/uR)):"";
+    const usdTxt=ing&&o.contratoUsd?(usdCobro(m)?`<br><span class="note" style="color:var(--good)">${fmtU(Math.round(usdCobro(m)))}</span>`:`<br><span class="note">sin US$</span>`):m.usd?`<br><span class="note">${fmtU(m.usd)}</span>`:"";
+    const av=ing&&o.contratoUsd&&!usdCobro(m)?` · <span style="color:var(--warn)">⚠ sin dólares asignados</span>`:"";
+    return `<button class="item" data-edit-mov="${esc(m.id)}"><span class="t">${esc(m.detalle||m.categoria||"Movimiento")}</span><span class="s">${esc(fdate(m.fecha))} · Caja ${esc(m.caja)}${esc(sub)}${av}</span><span class="m">${fmt(valorPesos(m))}${usdTxt}</span></button>`};
+  const sd=saldoObra(o,r);
   const rubros=Object.entries(rub).sort((a,b)=>tot(b[1])-tot(a[1]));
   const planH=isAdmin()?planObraHtml(o):"";
   const ultB=S.bit.filter(b=>b.obra===o.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,5);
@@ -1555,11 +1572,18 @@ function vLegajo(){
     <div class="row between"><h2>${esc(o.nombre)}</h2><span class="pill ${o.estado==="En curso"?"p-acc":o.estado==="Terminada"?"p-mut":"p-warn"}">${esc(o.estado||"En curso")}</span></div>
     <div class="note">${o.cliente?`Cliente: ${cl?`<a href="#cliente" data-cli="${esc(cl.id)}">${esc(o.cliente)}</a>`:esc(o.cliente)} · `:""}Encargado: ${esc(o.encargado||"—")}${f.ini?" · Desde "+esc(fdate(f.ini)):""}${f.fin?" al "+esc(fdate(f.fin)):""}${o.contratoUsd?" · Contrato "+fmtU(o.contratoUsd):""}</div>
     ${o.notas?`<div class="note">${esc(o.notas)}</div>`:""}
-    <div class="grid" style="margin-top:6px"><div class="card stat"><div class="lbl">Ingresos</div><div class="num pos">${fmt(r.cobros)}</div></div>
-      <div class="card stat"><div class="lbl">Egresos</div><div class="num neg">${fmt(egTot)}</div></div>
-      <div class="card stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":""}">${fmt(r.res)}</div></div></div>
+    ${sd?`<div class="card" style="border-color:var(--gold);display:flex;flex-direction:column;gap:6px;margin-top:6px">
+      <div class="row between"><span class="note" style="margin:0">Contrato</span><b>${fmtU(sd.c)}</b></div>
+      <div style="height:8px;background:var(--line,#e5e5e5);border-radius:4px;overflow:hidden"><div style="width:${sd.pct}%;height:100%;background:var(--good)"></div></div>
+      <div class="row between note" style="margin:0"><span>Cobrado ${sd.pct}%</span><span>Falta ${100-sd.pct}%</span></div>
+      <div class="grid"><div class="card stat"><div class="lbl">Cobrado</div><div class="num pos">${fmtU(Math.round(sd.u))}</div><div class="note">${fmt(r.cobros-sd.sinUArs)}</div></div>
+        <div class="card stat"><div class="lbl">Falta cobrar</div><div class="num neg">${fmtU(Math.round(sd.falta))}</div><div class="note">${sd.blue?"≈ "+fmt(sd.faltaArs):""}</div></div></div>
+      <div class="note" style="margin:0">${sd.blue?`Pesos estimados al blue de hoy (${fmt(sd.blue)}).`:""}${sd.sinU.length?` ⚠ ${sd.sinU.length} cobro${sd.sinU.length>1?"s":""} por ${fmt(sd.sinUArs)} sin dólares asignados: no cuenta${sd.sinU.length>1?"n":""} para el saldo.`:""}</div></div>`:""}
+    <div class="grid" style="margin-top:6px"><div class="card stat"><div class="lbl">Ingresos</div><div class="num pos">${fmt(r.cobros)}</div>${r.cobrosU?`<div class="note">${fmtU(Math.round(r.cobrosU))}</div>`:""}</div>
+      <div class="card stat"><div class="lbl">Egresos</div><div class="num neg">${fmt(egTot)}</div><div class="note">${aUsd(egTot)}</div></div>
+      <div class="card stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":""}">${fmt(r.res)}</div><div class="note">${aUsd(r.res)}</div></div></div>
   </section>
-  <section class="card" style="border-color:var(--good)"><div class="row between"><h3>Ingresos (${ING.length})</h3><b class="pos">${fmt(r.cobros)}</b></div>
+  <section class="card" style="border-color:var(--good)"><div class="row between"><h3>Ingresos (${ING.length})</h3><b class="pos">${fmt(r.cobros)}${r.cobrosU?`<br><span class="note">${fmtU(Math.round(r.cobrosU))}</span>`:""}</b></div>
     ${ING.length?`<div class="list" style="margin-top:6px">${ING.map(linea).join("")}</div>`:`<div class="empty">Todavía no hay cobros cargados para esta obra.</div>`}</section>
   <section class="card" style="border-color:var(--bad)"><div class="row between"><h3>Egresos por rubro</h3><b class="neg">${fmt(egTot)}</b></div>
     <p class="note" style="margin:2px 0 4px">Tocá un rubro para ver cada gasto.</p>
