@@ -113,7 +113,7 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="25/11 16:10";
+const VERSION="25/11 16:12";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -1159,6 +1159,9 @@ function openObra(o){
     <div class="two"><label class="f">Fecha de inicio<input type="date" id="o_ini" value="${esc(o.fechaInicio||"")}"></label><label class="f">Fecha de fin<input type="date" id="o_fin" value="${esc(o.fechaFin||"")}"></label></div>
     <div class="two"><label class="f">Contrato (US$ blue)<input id="o_usd" inputmode="decimal" value="${o.contratoUsd||""}"></label>
     <label class="f">Cliente<select id="o_cli"><option value="">Sin cliente</option>${[...S.cli].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.id)}" ${o.clienteId===c.id?"selected":""}>${esc(c.nombre)}</option>`).join("")}${o.cliente&&!S.cli.some(c=>c.id===o.clienteId)?`<option value="txt:${esc(o.cliente)}" selected>${esc(o.cliente)} (sin ficha)</option>`:""}</select></label></div>
+    <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)">Adicionales <span class="note" style="font-weight:400;margin:0">Trabajos extra al presupuesto inicial. Solo los <b>aprobados</b> suman al total de la obra.</span>
+      <div id="o_adic" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button type="button" class="btn sm" id="o_adNew" style="align-self:flex-start">+ Agregar adicional</button></div>
     <label class="f">Notas<textarea id="o_not">${esc(o.notas||"")}</textarea></label>
     ${e&&(S.movs.some(m=>m.obra===o.id)||S.jorn.some(j=>j.obra===o.id))?`<p class="note" style="margin:0">Esta obra tiene movimientos cargados: en vez de borrarla, pasala a “Terminada”.</p>`:""}
     ${footBtns(e&&!S.movs.some(m=>m.obra===o.id)&&!S.jorn.some(j=>j.obra===o.id)&&!S.bit.some(b=>b.obra===o.id))}</form>`,sh=>{
@@ -1168,14 +1171,28 @@ function openObra(o){
       box.innerHTML=L.map(u=>`<label class="chip" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-oenc="${esc(u.id)}" ${selEnc.has(u.id)?"checked":""}> ${esc(u.nombre||verUsuario(u))}${u.caja?` <span class="note" style="font-weight:400">· caja ${esc(u.caja)}</span>`:""}</label>`).join("")||`<span class="note" style="font-weight:400">Todavía no hay encargados. Creá uno con el botón de abajo.</span>`;
       box.querySelectorAll("[data-oenc]").forEach(x=>x.onchange=()=>{x.checked?selEnc.add(x.dataset.oenc):selEnc.delete(x.dataset.oenc)})};
     pintarEnc();
+    const adRow=a=>`<div class="card" data-adrow="${esc(a.id)}" style="margin:0;display:flex;flex-direction:column;gap:6px;font-weight:400">
+      <div class="row" style="gap:6px"><input data-k="concepto" value="${esc(a.concepto||"")}" placeholder="Trabajo adicional (ej: cerramiento de galería)" style="flex:1"><button type="button" class="btn sm" data-adx aria-label="Quitar">✕</button></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><input type="date" data-k="fecha" value="${esc(a.fecha||hoy())}" style="width:150px"><select data-k="moneda" style="width:80px"><option value="USD" ${a.moneda!=="ARS"?"selected":""}>US$</option><option value="ARS" ${a.moneda==="ARS"?"selected":""}>$</option></select><input data-k="monto" inputmode="decimal" value="${a.monto?esc(String(a.monto)):""}" placeholder="Monto" style="width:120px">
+      <select data-k="estado">${EST_AD.map(([k,l])=>`<option value="${k}" ${a.estado===k?"selected":""}>${l}</option>`).join("")}</select></div>
+      <input data-k="nota" value="${esc(a.nota||"")}" placeholder="Nota (ej: lo aprobó por WhatsApp el 24/11)"></div>`;
+    const AD=$("#o_adic");const bindAd=()=>AD.querySelectorAll("[data-adx]").forEach(x=>x.onclick=()=>{x.closest("[data-adrow]").remove()});
+    AD.innerHTML=(o.adicionales||[]).map(adRow).join("");bindAd();
+    $("#o_adNew").onclick=()=>{AD.insertAdjacentHTML("beforeend",adRow({id:"ad"+Date.now(),fecha:hoy(),moneda:"USD",estado:"presupuestado"}));bindAd();AD.lastElementChild.querySelector("[data-k=concepto]").focus()};
+    const leerAd=()=>[...AD.querySelectorAll("[data-adrow]")].map(r=>{const g=k=>r.querySelector(`[data-k=${k}]`).value;const prev=(o.adicionales||[]).find(x=>x.id===r.dataset.adrow)||{};
+      return {id:r.dataset.adrow,concepto:g("concepto").trim(),fecha:g("fecha"),moneda:g("moneda"),monto:num(g("monto"))||0,estado:g("estado"),nota:g("nota").trim(),creado:prev.creado||Date.now()}}).filter(a=>a.concepto||a.monto);
     $("#o_encNew").onclick=()=>{const P=$("#o_encPanel");if(P.style.display==="flex"){P.style.display="none";return}
       P.innerHTML=camposEnc({sinObras:true})+`<div class="row" style="gap:6px"><button type="button" class="btn pri sm" id="ne_ok">Crear encargado</button><button type="button" class="btn sm" id="ne_no">Cancelar</button></div>`;P.style.display="flex";
       prepCamposEnc(P);$("#ne_no").onclick=()=>{P.style.display="none"};
       $("#ne_ok").onclick=async()=>{const nu=await crearEnc(P,{obras:[]});if(nu){selEnc.add(nu.id);P.style.display="none";pintarEnc(true)}}};
     $("#fo").onsubmit=async ev=>{ev.preventDefault();const n=$("#o_nom").value.trim();if(!n)return toast("Falta el nombre");
       let fin=$("#o_fin").value;if($("#o_est").value==="Terminada"&&!fin)fin=hoy();
-      if(await save("obras",o.id,{...(()=>{const L=(S.perfiles||[]);if(!S.perfiles)return o.encargados?{encargados:o.encargados,encargado:o.encargado||""}:{encargado:o.encargado||""};
-        const ids=[...selEnc].filter(id=>L.some(u=>u.id===id));return {encargados:ids,encargado:ids.map(id=>{const u=L.find(x=>x.id===id);return u.nombre||verUsuario(u)}).join(", ")}})(),nombre:n,estado:$("#o_est").value,fechaInicio:$("#o_ini").value,fechaFin:fin,contratoUsd:num($("#o_usd").value)||0,...(()=>{const v=$("#o_cli").value;if(!v)return {cliente:"",clienteId:""};if(v.startsWith("txt:"))return {cliente:v.slice(4),clienteId:""};const c=S.cli.find(x=>x.id===v);return {cliente:c?c.nombre:"",clienteId:v}})(),notas:$("#o_not").value.trim(),creado:o.creado})){closeSheet();toast($("#o_est").value==="Terminada"&&o.estado!=="Terminada"?"Obra terminada: quedó en el Histórico":"Obra guardada")}};
+      const adics=leerAd();if(adics.some(a=>!a.monto))return toast("A un adicional le falta el monto");
+      const nuevosAprob=adics.filter(a=>a.estado==="aprobado"&&((o.adicionales||[]).find(x=>x.id===a.id)||{}).estado!=="aprobado");
+      const {id:_oid,_por:_opor,...oPrev}=o;
+      if(await save("obras",o.id,{...oPrev,adicionales:adics,...(()=>{const L=(S.perfiles||[]);if(!S.perfiles)return o.encargados?{encargados:o.encargados,encargado:o.encargado||""}:{encargado:o.encargado||""};
+        const ids=[...selEnc].filter(id=>L.some(u=>u.id===id));return {encargados:ids,encargado:ids.map(id=>{const u=L.find(x=>x.id===id);return u.nombre||verUsuario(u)}).join(", ")}})(),nombre:n,estado:$("#o_est").value,fechaInicio:$("#o_ini").value,fechaFin:fin,contratoUsd:num($("#o_usd").value)||0,...(()=>{const v=$("#o_cli").value;if(!v)return {cliente:"",clienteId:""};if(v.startsWith("txt:"))return {cliente:v.slice(4),clienteId:""};const c=S.cli.find(x=>x.id===v);return {cliente:c?c.nombre:"",clienteId:v}})(),notas:$("#o_not").value.trim(),creado:o.creado})){closeSheet();toast($("#o_est").value==="Terminada"&&o.estado!=="Terminada"?"Obra terminada: quedó en el Histórico":"Obra guardada");
+        if(e&&nuevosAprob.length&&isAdmin()&&confirm(`Se aprobó ${nuevosAprob.length===1?"un adicional":nuevosAprob.length+" adicionales"}. ¿Querés agendar el cobro en la proyección de pagos?`)){const a=nuevosAprob[0];setTimeout(()=>openItemProy(null,{tipo:"ingreso",obra:o.id,concepto:"Adicional: "+a.concepto,rubro:"Pago de cliente",moneda:a.moneda,monto:a.monto,fecha:hoy()}),150)}}};
   });
 }
 
@@ -1590,7 +1607,7 @@ function vLegajo(){
       <div class="card stat"><div class="lbl">Egresos</div><div class="num neg">${fmt(egTot)}</div><div class="note">${aUsd(egTot)}</div></div>
       <div class="card stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":""}">${fmt(r.res)}</div><div class="note">${aUsd(r.res)}</div></div></div>
   </section>
-  ${isAdmin()?adicHtml(o):""}
+  ${isAdmin()&&(o.adicionales||[]).length?adicHtml(o):""}
   <section class="card" style="border-color:var(--good)"><div class="row between"><h3>Ingresos (${ING.length})</h3><b class="pos">${fmt(r.cobros)}${r.cobrosU?`<br><span class="note">${fmtU(Math.round(r.cobrosU))}</span>`:""}</b></div>
     ${ING.length?`<div class="list" style="margin-top:6px">${ING.map(linea).join("")}</div>`:`<div class="empty">Todavía no hay cobros cargados para esta obra.</div>`}</section>
   <section class="card" style="border-color:var(--bad)"><div class="row between"><h3>Egresos por rubro</h3><b class="neg">${fmt(egTot)}</b></div>
@@ -1607,8 +1624,8 @@ function bindLegajo(){
   const o=S.obras.find(x=>x.id===S.legObra);if(!o)return;
   const e=$("#legEdit");if(e)e.onclick=()=>openObra(o);
   const pr=$("#legPrint");if(pr)pr.onclick=()=>imprimirHtml(hojaIngresos(o));
-  const an=$("#adNew");if(an)an.onclick=()=>openAdic(o);
-  document.querySelectorAll("[data-adic]").forEach(x=>x.onclick=()=>openAdic(o,(o.adicionales||[]).find(a=>a.id===x.dataset.adic)));
+  const an=$("#adNew");if(an)an.onclick=()=>openObra(o);
+  document.querySelectorAll("[data-adic]").forEach(x=>x.onclick=()=>openObra(o));
   document.querySelectorAll("[data-pobra]").forEach(x=>x.onclick=()=>openItemProy(null,{tipo:x.dataset.pobra,obra:o.id}));
   document.querySelectorAll("#view [data-ped]").forEach(x=>x.onclick=()=>openItemProy(proy().items.find(i=>i.id===x.dataset.ped)));
   const s=$("#legSrch");if(s)s.onclick=()=>{S.q={t:o.nombre,desde:"",hasta:"",que:"movs"};location.hash="buscar"};
@@ -2784,8 +2801,8 @@ function planObraHtml(o){const P=proy(),L=P.items.filter(i=>i.obra===o.id).sort(
 const EST_AD=[["presupuestado","Presupuestado","p-warn"],["aprobado","Aprobado","p-good"],["rechazado","Rechazado","p-mut"]];
 function adicHtml(o){const ad=adicDe(o),L=[...ad.L].sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""));
   const pill=e=>{const x=EST_AD.find(y=>y[0]===e)||EST_AD[0];return `<span class="pill ${x[2]}">${x[1]}</span>`};
-  return `<section class="card"><div class="row between"><h3>Adicionales (${L.length})</h3><button class="btn sm pri" id="adNew">+ Adicional</button></div>
-    <p class="note" style="margin:4px 0 8px">Trabajos extra que se suman al presupuesto inicial. Solo los <b>aprobados</b> suman al total de la obra.</p>
+  return `<section class="card"><div class="row between"><h3>Adicionales (${L.length})</h3><button class="btn sm" id="adNew">Editar adicionales</button></div>
+    <p class="note" style="margin:4px 0 8px">Se cargan y editan en “Editar datos de la obra”. Solo los <b>aprobados</b> suman al total.</p>
     ${L.length?`<div class="list">${L.map(a=>`<button class="item" data-adic="${esc(a.id)}"><span class="t">${esc(a.concepto)}</span><span class="s">${esc(fdate(a.fecha))}${a.nota?" · "+esc(a.nota):""}</span><span class="m">${a.moneda==="USD"?fmtU(a.monto):fmt(a.monto)}<br>${pill(a.estado)}</span></button>`).join("")}</div>
     ${ad.n?`<div class="row between" style="margin-top:6px"><b>Suman al total</b><b class="pos">${ad.usd?fmtU(ad.usd):""}${ad.usd&&ad.ars?" + ":""}${ad.ars?fmt(ad.ars):""}</b></div>`:""}`:`<div class="empty">Sin adicionales.</div>`}</section>`}
 function openAdic(o,a){const e=!!a;a=a||{fecha:hoy(),moneda:"USD",estado:"presupuestado"};
