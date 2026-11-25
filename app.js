@@ -100,8 +100,8 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="24/11 11:41";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar"];
+const VERSION="25/11 11:33";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -128,7 +128,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -838,6 +838,7 @@ function bindView(v){
   if(v==="fede")bindFede(V);
   if(v==="usd")bindUsd(V);
   if(v==="tarjetas")bindTarjetas(V);
+  if(v==="encargados")bindEncargados(V);
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
@@ -1131,8 +1132,11 @@ function openObra(o){
   openSheet(`<form id="fo" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?o.nombre:"Nueva obra")}
     ${e?`<div class="grid"><div class="stat"><div class="lbl">Cobrado</div><div class="num">${fmt(r.cobros)}</div></div><div class="stat"><div class="lbl">Gastos + jornales</div><div class="num">${fmt(r.gastos+r.costoJ)}</div></div><div class="stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":"pos"}">${fmt(r.res)}</div></div></div>`:""}
     <label class="f">Nombre<input id="o_nom" value="${esc(o.nombre)}" required></label>
-    <div class="two"><label class="f">Encargado<input id="o_enc" value="${esc(o.encargado||"")}"></label>
-    <label class="f">Estado<select id="o_est">${["En curso","Por comenzar","Terminada"].map(x=>`<option ${o.estado===x?"selected":""}>${x}</option>`).join("")}</select></label></div>
+    <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)">Encargados de la obra
+      <div id="o_encs" style="display:flex;flex-wrap:wrap;gap:8px"><span class="note" style="font-weight:400">Cargando encargados…</span></div>
+      <button type="button" class="btn sm" id="o_encNew" style="align-self:flex-start">+ Nuevo encargado</button>
+      <div id="o_encPanel" class="card" style="display:none;flex-direction:column;gap:8px;border-color:var(--gold);font-weight:400"></div></div>
+    <div class="two"><label class="f">Estado<select id="o_est">${["En curso","Por comenzar","Terminada"].map(x=>`<option ${o.estado===x?"selected":""}>${x}</option>`).join("")}</select></label></div>
     <div class="two"><label class="f">Fecha de inicio<input type="date" id="o_ini" value="${esc(o.fechaInicio||"")}"></label><label class="f">Fecha de fin<input type="date" id="o_fin" value="${esc(o.fechaFin||"")}"></label></div>
     <div class="two"><label class="f">Contrato (US$ blue)<input id="o_usd" inputmode="decimal" value="${o.contratoUsd||""}"></label>
     <label class="f">Cliente<select id="o_cli"><option value="">Sin cliente</option>${[...S.cli].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.id)}" ${o.clienteId===c.id?"selected":""}>${esc(c.nombre)}</option>`).join("")}${o.cliente&&!S.cli.some(c=>c.id===o.clienteId)?`<option value="txt:${esc(o.cliente)}" selected>${esc(o.cliente)} (sin ficha)</option>`:""}</select></label></div>
@@ -1140,9 +1144,19 @@ function openObra(o){
     ${e&&(S.movs.some(m=>m.obra===o.id)||S.jorn.some(j=>j.obra===o.id))?`<p class="note" style="margin:0">Esta obra tiene movimientos cargados: en vez de borrarla, pasala a “Terminada”.</p>`:""}
     ${footBtns(e&&!S.movs.some(m=>m.obra===o.id)&&!S.jorn.some(j=>j.obra===o.id)&&!S.bit.some(b=>b.obra===o.id))}</form>`,sh=>{
     wireCommon(sh,"obras",o.id);
+    const selEnc=new Set(o.encargados||[]);
+    const pintarEnc=async(forzar)=>{const L=(await cargarPerfiles(forzar)).filter(u=>u.rol==="encargado");const box=$("#o_encs");if(!box)return;
+      box.innerHTML=L.map(u=>`<label class="chip" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-oenc="${esc(u.id)}" ${selEnc.has(u.id)?"checked":""}> ${esc(u.nombre||verUsuario(u))}${u.caja?` <span class="note" style="font-weight:400">· caja ${esc(u.caja)}</span>`:""}</label>`).join("")||`<span class="note" style="font-weight:400">Todavía no hay encargados. Creá uno con el botón de abajo.</span>`;
+      box.querySelectorAll("[data-oenc]").forEach(x=>x.onchange=()=>{x.checked?selEnc.add(x.dataset.oenc):selEnc.delete(x.dataset.oenc)})};
+    pintarEnc();
+    $("#o_encNew").onclick=()=>{const P=$("#o_encPanel");if(P.style.display==="flex"){P.style.display="none";return}
+      P.innerHTML=camposEnc({sinObras:true})+`<div class="row" style="gap:6px"><button type="button" class="btn pri sm" id="ne_ok">Crear encargado</button><button type="button" class="btn sm" id="ne_no">Cancelar</button></div>`;P.style.display="flex";
+      prepCamposEnc(P);$("#ne_no").onclick=()=>{P.style.display="none"};
+      $("#ne_ok").onclick=async()=>{const nu=await crearEnc(P,{obras:[]});if(nu){selEnc.add(nu.id);P.style.display="none";pintarEnc(true)}}};
     $("#fo").onsubmit=async ev=>{ev.preventDefault();const n=$("#o_nom").value.trim();if(!n)return toast("Falta el nombre");
       let fin=$("#o_fin").value;if($("#o_est").value==="Terminada"&&!fin)fin=hoy();
-      if(await save("obras",o.id,{...(o.encargados?{encargados:o.encargados}:{}),nombre:n,encargado:$("#o_enc").value.trim(),estado:$("#o_est").value,fechaInicio:$("#o_ini").value,fechaFin:fin,contratoUsd:num($("#o_usd").value)||0,...(()=>{const v=$("#o_cli").value;if(!v)return {cliente:"",clienteId:""};if(v.startsWith("txt:"))return {cliente:v.slice(4),clienteId:""};const c=S.cli.find(x=>x.id===v);return {cliente:c?c.nombre:"",clienteId:v}})(),notas:$("#o_not").value.trim(),creado:o.creado})){closeSheet();toast($("#o_est").value==="Terminada"&&o.estado!=="Terminada"?"Obra terminada: quedó en el Histórico":"Obra guardada")}};
+      if(await save("obras",o.id,{...(()=>{const L=(S.perfiles||[]);if(!S.perfiles)return o.encargados?{encargados:o.encargados,encargado:o.encargado||""}:{encargado:o.encargado||""};
+        const ids=[...selEnc].filter(id=>L.some(u=>u.id===id));return {encargados:ids,encargado:ids.map(id=>{const u=L.find(x=>x.id===id);return u.nombre||verUsuario(u)}).join(", ")}})(),nombre:n,estado:$("#o_est").value,fechaInicio:$("#o_ini").value,fechaFin:fin,contratoUsd:num($("#o_usd").value)||0,...(()=>{const v=$("#o_cli").value;if(!v)return {cliente:"",clienteId:""};if(v.startsWith("txt:"))return {cliente:v.slice(4),clienteId:""};const c=S.cli.find(x=>x.id===v);return {cliente:c?c.nombre:"",clienteId:v}})(),notas:$("#o_not").value.trim(),creado:o.creado})){closeSheet();toast($("#o_est").value==="Terminada"&&o.estado!=="Terminada"?"Obra terminada: quedó en el Histórico":"Obra guardada")}};
   });
 }
 
@@ -1705,7 +1719,7 @@ async function cargarTabla(t){
   let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);
     if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}  /* la tabla todavía no existe: la app sigue andando */
     if(error)throw error;all=all.concat(data);if(data.length<1000)break}
-  if(t==="config"){const g=all.find(r=>r.id==="general");if(g){const d=g.data;S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
+  if(t==="config"){const g=all.find(r=>r.id==="general");if(g){const d=g.data;(d.cajasExtra||[]).forEach(c=>{if(c&&!CAJAS.includes(c))CAJAS.push(c)});S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
     const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
@@ -1770,7 +1784,7 @@ new MutationObserver(()=>ponerOjitos()).observe(document.body,{childList:true,su
 
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-adm]");if(!b)return;
   const k=b.dataset.adm;
-  if(k==="pagorem")openMov(null,{tipo:"egreso",conRemito:true});else if(k==="users")openUsers();else if(k==="newenc"){S.preRol="encargado";openUsers()}else if(k==="newobra")openObra();
+  if(k==="pagorem")openMov(null,{tipo:"egreso",conRemito:true});else if(k==="users")openUsers();else if(k==="newenc")openNuevoEnc({alTerminar:()=>{location.hash="encargados";cargarPerfiles(true)}});else if(k==="newobra")openObra();
   else if(k==="newcli")openCliente();else if(k==="newprov")openProv();else if(k==="newherr")openInv();
   else if(k==="backup")copiaSeguridad();else if(k==="pack")runPack();else openCfg()});
 
@@ -1903,7 +1917,7 @@ function menuItems(){
   return [
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
     ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
-    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["presupuestos","📐","Precios y presupuestos"]]],
+    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["encargados","🦺","Encargados"],["presupuestos","📐","Precios y presupuestos"]]],
     ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
 }
 function pintarMenu(){
@@ -2437,3 +2451,64 @@ const _fotoUrl={};
 async function urlsFotos(paths){const falta=paths.filter(p=>!_fotoUrl[p]||_fotoUrl[p].t<Date.now()-50*60e3);
   if(falta.length&&sb){try{const {data}=await sb.storage.from("legajos").createSignedUrls(falta,3600);(data||[]).forEach(r=>{if(r.signedUrl)_fotoUrl[r.path]={u:r.signedUrl,t:Date.now()}})}catch(_){}}
   const o={};paths.forEach(p=>{if(_fotoUrl[p])o[p]=_fotoUrl[p].u});return o}
+
+
+/* ---------- encargados (solo administración) ---------- */
+let _perfP=null;
+function cargarPerfiles(forzar){if(S.perfiles&&!forzar)return Promise.resolve(S.perfiles);if(_perfP&&!forzar)return _perfP;
+  _perfP=sb.from("perfiles").select("*").order("nombre").then(({data,error})=>{_perfP=null;if(error){toast("No se pudieron leer los usuarios");return S.perfiles||[]}S.perfiles=data||[];if(cur()==="encargados")safeRender();return S.perfiles});return _perfP}
+function vEncargados(){
+  if(!S.perfiles){cargarPerfiles();return `<h2>Encargados</h2><div class="card empty">Cargando encargados…</div>`}
+  const L=S.perfiles.filter(u=>u.rol==="encargado"),mes=hoy().slice(0,7),fin=new Date(+mes.slice(0,4),+mes.slice(5),0).getDate();
+  return `<div class="row between"><h2>Encargados</h2><button class="btn pri sm" id="enc_new">+ Nuevo encargado</button></div>
+  <p class="note" style="margin:0">Cada encargado entra con su usuario y solo ve sus obras: carga gastos de su caja, jornales, bitácora y fotos.</p>
+  ${L.map(u=>{const obs=S.obras.filter(o=>(o.encargados||[]).includes(u.id));const ult=S.bit.filter(b=>b._por===u.id).map(b=>b.fecha).sort().pop();
+    const sin=bitDias(obs.filter(o=>o.estado!=="Terminada"),mes+"-01",mes+"-"+String(fin).padStart(2,"0")).filter(d=>d.est==="sin").length;
+    const sal=u.caja?saldos(u.caja):null;
+    return `<section class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div class="row between"><div><b style="font-size:17px">${esc(u.nombre||verUsuario(u))}</b><div class="note">Entra con: <b>${esc(verUsuario(u))}</b></div></div>
+      ${u.caja?`<button class="btn sm" data-ecaja="${esc(u.caja)}" style="text-align:right">Caja ${esc(u.caja)}<br><b>${fmt(sal.ars)}</b>${sal.usd?` · ${fmtU(sal.usd)}`:""}</button>`:`<span class="pill p-warn">Sin caja</span>`}</div>
+      <div class="chips">${obs.map(o=>`<span class="chip" aria-pressed="true">${esc(o.nombre)}</span>`).join("")||`<span class="note">Sin obras asignadas</span>`}</div>
+      <div class="note" style="margin:0">Bitácora: ${ult?`último registro ${esc(fdate(ult))}`:"todavía no cargó nada"} · ${sin?`<b style="color:var(--warn)">${sin} día${sin===1?"":"s"} sin registro este mes</b>`:"al día este mes ✔"}</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" data-eobras="${esc(u.id)}">Asignar obras</button><button class="btn sm" data-epw="${esc(u.id)}">Cambiar contraseña</button><button class="btn sm danger" data-equitar="${esc(u.id)}">Quitar acceso</button></div>
+    </section>`}).join("")||`<div class="card empty">Todavía no hay encargados. Tocá “+ Nuevo encargado”.</div>`}`}
+function bindEncargados(V){
+  const n=V.querySelector("#enc_new");if(n)n.onclick=()=>openNuevoEnc({alTerminar:()=>cargarPerfiles(true)});
+  V.querySelectorAll("[data-ecaja]").forEach(b=>b.onclick=()=>{S.filt.caja=b.dataset.ecaja;location.hash="caja"});
+  V.querySelectorAll("[data-eobras]").forEach(b=>b.onclick=()=>{const u=S.perfiles.find(x=>x.id===b.dataset.eobras);
+    openSheet(`<div style="display:flex;flex-direction:column;gap:10px">${sheetHead("Obras de "+(u.nombre||verUsuario(u)))}
+      <div class="list">${obrasCargo().filter(o=>!o.id.startsWith("_")).map(o=>`<label class="item" style="cursor:pointer;grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" data-ao="${esc(o.id)}" ${(o.encargados||[]).includes(u.id)?"checked":""}><span class="t">${esc(o.nombre)}</span></label>`).join("")}</div>
+      <p class="note" style="margin:0">Solo va a ver y cargar en las obras tildadas.</p><button class="btn pri" id="ao_ok">Guardar</button></div>`,sh=>{
+      sh.querySelector("[data-close]").onclick=closeSheet;
+      $("#ao_ok").onclick=async()=>{try{await asignarObras(u.id,[...sh.querySelectorAll("[data-ao]:checked")].map(i=>i.dataset.ao));await sincNombresEnc();closeSheet();toast("Obras asignadas");render()}catch(e){toast(errMsg(e))}}})});
+  V.querySelectorAll("[data-epw]").forEach(b=>b.onclick=async()=>{const pw=prompt("Contraseña nueva (mínimo 8 caracteres). Anotala: después no se puede ver.");if(!pw)return;if(pw.length<8)return toast("Tiene que tener al menos 8 caracteres");
+    const r=await sb.rpc("admin_cambiar_password",{p_id:b.dataset.epw,p_password:pw});toast(r.error?r.error.message.replace(/^.*?:\s*/,""):"Contraseña cambiada")});
+  V.querySelectorAll("[data-equitar]").forEach(b=>b.onclick=async()=>{if(!b.dataset.sure){b.dataset.sure=1;b.textContent="¿Seguro? Tocá de nuevo";return}
+    const {error}=await sb.from("perfiles").update({rol:"pendiente"}).eq("id",b.dataset.equitar);if(error)return toast("No se pudo");await asignarObras(b.dataset.equitar,[]);await sincNombresEnc();toast("Ya no puede entrar. Sus datos cargados quedan.");cargarPerfiles(true)});
+}
+async function sincNombresEnc(){const L=S.perfiles||[];for(const o of S.obras){if(!o.encargados)continue;const t=o.encargados.map(id=>{const u=L.find(x=>x.id===id);return u?(u.nombre||verUsuario(u)):""}).filter(Boolean).join(", ");
+  if(t!==(o.encargado||"")){const {id,_por,...r}=o;await db.collection("obras").doc(id).set({...r,encargado:t})}}}
+function camposEnc(op={}){const cajasEnc=CAJAS.filter(c=>!["General","Federico","Numa"].includes(c));
+  return `<div class="two"><label class="f">Nombre y apellido<input id="ne_nom" placeholder="Ej: Juan Pérez"></label>
+    <label class="f">Usuario para entrar<input id="ne_user" autocapitalize="none" placeholder="juanperez"></label>
+    <label class="f">Contraseña<input id="ne_pw" minlength="8" placeholder="Mínimo 8 caracteres"></label>
+    <label class="f">Caja<select id="ne_caja"><option value="__nueva">Crear caja propia con su nombre</option>${cajasEnc.map(c=>`<option>${esc(c)}</option>`).join("")}<option value="">Sin caja (no carga gastos)</option></select></label></div>
+    ${op.sinObras?`<p class="note" style="margin:0">Queda tildado en esta obra; se guarda cuando guardes la obra.</p>`:`<div><span class="note"><b>Obras a cargo</b>:</span><div class="row" style="margin-top:4px;flex-wrap:wrap">${obrasCargo().filter(o=>!o.id.startsWith("_")).map(o=>`<label class="row" style="font-size:14px;gap:4px"><input type="checkbox" data-neo="${esc(o.id)}" ${o.id===op.obraPre?"checked":""}> ${esc(o.nombre)}</label>`).join("")}</div></div>`}
+    <p class="note" style="margin:0">Anotá el usuario y la contraseña en tu lista: la contraseña después no se puede ver, solo cambiar.</p>`}
+function prepCamposEnc(R){const nom=R.querySelector("#ne_nom"),usr=R.querySelector("#ne_user");let tocado=false;usr.oninput=()=>{tocado=true};nom.oninput=()=>{if(!tocado)usr.value=slugUser(nom.value)};setTimeout(()=>nom.focus(),60)}
+async function crearEnc(R,op={}){const q=x=>R.querySelector(x);const u=slugUser(q("#ne_user").value),nombre=q("#ne_nom").value.trim(),pw=q("#ne_pw").value;
+  if(!nombre)return toast("Falta el nombre"),null;if(u.length<3)return toast("El usuario tiene que tener al menos 3 letras"),null;if(pw.length<8)return toast("La contraseña tiene que tener al menos 8 caracteres"),null;
+  let caja=q("#ne_caja").value;
+  try{if(caja==="__nueva"){let base=nombre.split(/\s+/)[0]||u;base=base.charAt(0).toUpperCase()+base.slice(1).toLowerCase();caja=base;let k=2;while(CAJAS.includes(caja))caja=base+" "+(k++)}
+    const {data:nid,error}=await sb.rpc("admin_crear_usuario",{p_usuario:u,p_password:pw,p_nombre:nombre,p_rol:"encargado",p_caja:caja});
+    if(error){toast(error.message.replace(/^.*?:\s*/,"")||"No se pudo crear");return null}
+    if(q("#ne_caja").value==="__nueva"){const {id:_i,_por:_p,...resto}=S.cfg;await db.doc("config/general").set({...resto,cajasExtra:[...(S.cfg.cajasExtra||[]),caja]});if(!CAJAS.includes(caja))CAJAS.push(caja)}
+    const obs=op.obras||[...R.querySelectorAll("[data-neo]:checked")].map(i=>i.dataset.neo);
+    if(nid&&obs.length)await asignarObras(nid,obs);
+    await cargarPerfiles(true);if(obs.length)await sincNombresEnc();
+    toast(`Encargado ${u} creado${caja?" · caja "+caja:""}`);return nid?{id:nid,nombre}:null}
+  catch(e){toast(errMsg(e));return null}}
+function openNuevoEnc(op={}){
+  openSheet(`<form id="ne" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Nuevo encargado")}${camposEnc(op)}<button class="btn pri" type="submit">Crear encargado</button></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;prepCamposEnc(sh);
+    $("#ne").onsubmit=async ev=>{ev.preventDefault();const nu=await crearEnc(sh);if(nu){closeSheet();if(op.alTerminar)op.alTerminar(nu)}}})}
