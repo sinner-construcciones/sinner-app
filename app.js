@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="25/11 12:48";
+const VERSION="25/11 12:52";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -2558,34 +2558,69 @@ function lineasProy(a,b){const P=proy(),out=[];
   if(P.autoTarjeta)for(const m of S.movs.filter(x=>x.pago==="tarjeta"))for(const c of cuotasDe(m)){const f=mismoDia(c.mes,dia);if(f>=a&&f<=b)out.push({k:"tj|"+m.id+"|"+c.n,f,tipo:"egreso",obra:m.obra||"_empresa",grupo:"tarjeta",concepto:`${m.tarjeta||"Tarjeta"}: ${m.detalle||m.categoria||"compra"} (cuota ${c.n} de ${c.de})`,rubro:"Tarjeta",monto:c.monto,auto:true})}
   return out.sort((x,y)=>x.f.localeCompare(y.f)||(x.tipo==="ingreso")-(y.tipo==="ingreso"))}
 const GRUPOS=[["sueldos","Sueldos"],["obra","Gastos de obras"],["admin","Administrativos"],["tarjeta","Tarjeta"]];
+/* pendientes: P.pend[k]={desde,parc:[{monto,fecha}],pagEn} */
+const keyFecha=k=>k.split("|").pop();
+function estadoLinea(l,P){const pe=(P.pend||{})[l.k];l.pend=pe||null;l.pagado=!!(l.it&&(l.it.pagos||{})[l.f])||!!(pe&&pe.pagEn);
+  l.parcial=pe?(pe.parc||[]).reduce((a,x)=>a+(+x.monto||0),0):0;l.resta=Math.max(0,l.monto-l.parcial);return l}
+function pendientesHasta(ini){/* líneas pendientes de antes de ini que siguen vivas al empezar la semana */
+  const P=proy(),ks=Object.keys(P.pend||{});if(!ks.length)return [];const desde=ks.map(keyFecha).sort()[0];if(desde>=ini)return [];
+  return lineasProy(desde,addDias(ini,-1)).map(l=>estadoLinea(l,P)).filter(l=>l.pend&&(!l.pend.pagEn||l.pend.pagEn>=ini))}
 function vProyeccion(){
   if(!isAdmin())return `<div class="empty">Solo administración.</div>`;
   const P=proy(),sab=S.filt.psem||finSemana(hoy()),ini=iniSemana(sab),gf=S.filt.pgrp||"";
-  const L=lineasProy(ini,sab),E=L.filter(l=>l.tipo==="egreso"),I=L.filter(l=>l.tipo==="ingreso");
-  const tot=x=>x.reduce((a,l)=>a+l.monto,0),te=tot(E),ti=tot(I);
+  const L=lineasProy(ini,sab).map(l=>estadoLinea(l,P));
+  const A=pendientesHasta(ini).filter(l=>!l.pend.pagEn||l.pend.pagEn<=sab);
+  const vivo=l=>!l.pend;
+  const E=L.filter(l=>l.tipo==="egreso"&&vivo(l)),I=L.filter(l=>l.tipo==="ingreso"&&vivo(l));
+  const AE=A.filter(l=>l.tipo==="egreso"),AI=A.filter(l=>l.tipo==="ingreso");
+  const tot=x=>x.reduce((a,l)=>a+l.monto,0),totR=x=>x.reduce((a,l)=>a+(l.pend&&l.pend.pagEn?0:l.resta),0);
+  const te=tot(E)+totR(AE),ti=tot(I)+totR(AI);
+  const todosPend=(()=>{const ks=Object.keys(P.pend||{});if(!ks.length)return [];const fs=ks.map(keyFecha).sort();return lineasProy(fs[0],fs[fs.length-1]).map(l=>estadoLinea(l,P)).filter(l=>l.pend&&!l.pend.pagEn)})();
+  const pendTot=todosPend.filter(l=>l.tipo==="egreso").reduce((a,l)=>a+l.resta,0);
   const usdSin=P.items.some(it=>it.moneda==="USD")&&!+P.cot;
   const nomO=o=>o==="_admin"?"Administrativo":o==="_sueldos"?"Sueldos fijos":o==="_jornales"?"Sin obra":obraNombre(o);
-  const linea=l=>`<div class="item" style="cursor:default;grid-template-columns:minmax(0,1fr) auto;align-items:center;${l.pagado?"opacity:.55":""}">
-    <span><span class="t" style="${l.pagado?"text-decoration:line-through":""}">${esc(l.concepto||l.rubro||"—")}</span><br><span class="s">${esc(fdia(l.f))} · ${esc(nomO(l.obra))}${l.rubro&&!l.auto?" · "+esc(l.rubro):""}${l.usd?" · "+fmtU(l.usd):""}</span></span>
-    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><button class="btn sm" data-paj="${esc(l.k)}" title="Cambiar el monto solo de esta semana" style="font-weight:700" ><span class="${l.tipo==="ingreso"?"pos":""}">${fmt(l.monto)}</span> ✎</button>${l.ajustado?`<span class="note" style="margin:0">ajustado (era ${fmt(l.orig)})</span>`:""}${l.auto?"":`<span style="display:flex;gap:4px"><button class="btn sm" data-pok="${esc(l.k)}">${l.pagado?"Desmarcar":l.tipo==="ingreso"?"✓ Cobrado":"✓ Pagado"}</button><button class="btn sm" data-ped="${esc(l.it.id)}">Editar</button></span>`}</span></div>`;
-  const EG=gf?E.filter(l=>l.grupo===gf):E;
+  const ing=l=>l.tipo==="ingreso";
+  const linea=(l,modo)=>{/* modo: normal | movida (pendiente en su semana original) | arrastre */
+    const movida=modo==="movida",arr=modo==="arrastre",pagadoYa=arr&&l.pend.pagEn;
+    const sub=`${esc(fdia(l.f))} · ${esc(nomO(l.obra))}${l.rubro&&!l.auto?" · "+esc(l.rubro):""}${l.usd?" · "+fmtU(l.usd):""}`;
+    const btn=(k,t,cls="")=>`<button class="btn sm ${cls}" data-pact="${k}" data-pk="${esc(l.k)}">${t}</button>`;
+    let acc="";
+    if(movida)acc=btn("quitar","Quitar pendiente");
+    else if(arr)acc=pagadoYa?btn("despagar","Desmarcar"):btn("pagar",ing(l)?"✓ Entró":"✓ Pagado")+btn("parcial",ing(l)?"Entró una parte":"Pagar una parte")+btn("quitar","Quitar pendiente");
+    else if(l.pagado)acc=btn("despagar","Desmarcar");
+    else acc=btn("pagar",ing(l)?"✓ Cobrado":"✓ Pagado")+btn("pend",ing(l)?"⏸ No entró":"⏸ Dejar pendiente","")+(l.it?`<button class="btn sm" data-ped="${esc(l.it.id)}">Editar</button>`:"");
+    const monto=arr?l.resta:l.monto;
+    return `<div class="item" style="cursor:default;display:block;${l.pagado&&!arr||movida||pagadoYa?"opacity:.6;":""}${arr&&!pagadoYa?"border-left:3px solid var(--warn);":""}">
+      <div class="row between" style="gap:8px;align-items:flex-start"><span><span class="t" style="${l.pagado&&!arr||movida?"text-decoration:line-through":""}">${esc(l.concepto||l.rubro||"—")}</span><br><span class="s">${sub}</span>
+      ${movida?`<br><span class="note" style="margin:0;color:var(--warn)">⏸ ${ing(l)?"No entró":"Pendiente"}: pasó a la semana siguiente</span>`:""}
+      ${arr?`<br><span class="note" style="margin:0;color:var(--warn)">${pagadoYa?`${ing(l)?"Entró":"Pagado"} el ${esc(fdate(l.pend.pagEn))}`:`Venía del ${esc(fdate(l.f))}${l.parcial?` · ya ${ing(l)?"entraron":"se pagaron"} ${fmt(l.parcial)} de ${fmt(l.monto)}`:""}`}</span>`:""}</span>
+      ${arr||movida?`<b class="${ing(l)?"pos":""}" style="white-space:nowrap">${fmt(monto)}</b>`:`<button class="btn sm" data-paj="${esc(l.k)}" title="Cambiar el monto solo de esta semana" style="font-weight:700;white-space:nowrap"><span class="${ing(l)?"pos":""}">${fmt(l.monto)}</span> ✎</button>`}</div>
+      ${l.ajustado&&!arr?`<div class="note" style="margin:2px 0 0;text-align:right">ajustado (era ${fmt(l.orig)})</div>`:""}
+      <div class="row" style="gap:4px;flex-wrap:wrap;justify-content:flex-end;margin-top:6px">${acc}</div></div>`};
+  const EG=gf&&gf!=="pend"?E.filter(l=>l.grupo===gf):E;
+  const movE=L.filter(l=>l.tipo==="egreso"&&l.pend),movI=L.filter(l=>l.tipo==="ingreso"&&l.pend);
   return `<div class="row between"><h2>Proyección de pagos</h2><button class="btn sm" id="pr_cfg">Ajustes</button></div>
   ${usdSin?`<div class="banner">Hay montos en dólares: poné en Ajustes la cotización para proyectar.</div>`:""}
   <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center"><button class="btn sm" data-pmov="-1" aria-label="Semana anterior">‹</button><b style="text-align:center">${sab===finSemana(hoy())?"Esta semana":"Semana"}<br><span class="note" style="font-weight:400">dom ${esc(fdate(ini).slice(0,5))} al sáb ${esc(fdate(sab).slice(0,5))}</span></b><button class="btn sm" data-pmov="1" aria-label="Semana siguiente">›</button></div>
   <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px">
-    <section class="card stat" style="margin:0"><div class="lbl">Hay que pagar</div><div class="num neg" style="font-size:26px">${fmt(te)}</div><div class="note" style="margin:0">${E.length} pago${E.length===1?"":"s"} en la semana</div></section>
-    <section class="card stat" style="margin:0"><div class="lbl">Cobro esperado</div><div class="num pos">${fmt(ti)}</div><div class="note" style="margin:0">${I.length?I.map(l=>esc(nomO(l.obra))).filter((x,i,a)=>a.indexOf(x)===i).join(", "):"Ninguno cargado"}</div></section></div>
-  <div class="grid">${GRUPOS.map(([k,l])=>`<button class="card stat" data-pgrp="${k}" style="cursor:pointer;text-align:left;margin:0;${gf===k?"outline:2px solid var(--acc);":""}"><div class="lbl">${l}</div><div class="num" style="font-size:17px">${fmt(tot(E.filter(x=>x.grupo===k)))}</div></button>`).join("")}</div>
+    <section class="card stat" style="margin:0"><div class="lbl">Hay que pagar</div><div class="num neg" style="font-size:26px">${fmt(te)}</div><div class="note" style="margin:0">${E.length} pago${E.length===1?"":"s"} de la semana${totR(AE)?`<br>incluye <b style="color:var(--warn)">${fmt(totR(AE))}</b> pendientes de semanas anteriores`:""}</div></section>
+    <section class="card stat" style="margin:0"><div class="lbl">Cobro esperado</div><div class="num pos">${fmt(ti)}</div><div class="note" style="margin:0">${[...I,...AI.filter(l=>!l.pend.pagEn)].length?[...I,...AI].map(l=>esc(nomO(l.obra))).filter((x,i,a)=>a.indexOf(x)===i).join(", "):"Ninguno cargado"}${totR(AI)?`<br>incluye ${fmt(totR(AI))} atrasados`:""}</div></section></div>
+  ${pendTot?`<button class="card stat" data-pgrp="pend" style="cursor:pointer;text-align:left;margin:0;border-color:var(--warn);${gf==="pend"?"outline:2px solid var(--warn);":""}"><div class="lbl">Pendientes que se vienen arrastrando</div><div class="num" style="font-size:18px;color:var(--warn)">${fmt(pendTot)}</div><div class="note" style="margin:0">${todosPend.filter(l=>l.tipo==="egreso").length} pago${todosPend.filter(l=>l.tipo==="egreso").length===1?"":"s"} sin cubrir · tocá para ver</div></button>`:""}
+  <div class="grid">${GRUPOS.map(([k,l])=>`<button class="card stat" data-pgrp="${k}" style="cursor:pointer;text-align:left;margin:0;${gf===k?"outline:2px solid var(--acc);":""}"><div class="lbl">${l}</div><div class="num" style="font-size:17px">${fmt(tot(E.filter(x=>x.grupo===k))+totR(AE.filter(x=>x.grupo===k)))}</div></button>`).join("")}</div>
+  ${gf==="pend"?`<section class="card"><div class="row between"><h3>Todos los pendientes</h3><button class="btn sm" data-pgrp="">Volver ✕</button></div><div class="list" style="margin-top:6px">${todosPend.map(l=>linea(l,"arrastre")).join("")}</div></section>`:`
+  ${A.length?`<section class="card" style="border-color:var(--warn)"><h3 style="color:var(--warn)">Pendientes de semanas anteriores</h3><div class="list" style="margin-top:6px">${(gf?AE.filter(l=>l.grupo===gf):AE).map(l=>linea(l,"arrastre")).join("")}${gf?"":AI.map(l=>linea(l,"arrastre")).join("")}</div></section>`:""}
   <section class="card"><div class="row between"><h3>${gf?esc(GRUPOS.find(g=>g[0]===gf)[1]):"Pagos de la semana"}</h3>${gf?`<button class="btn sm" data-pgrp="">Ver todos ✕</button>`:""}</div>
-    <div class="list" style="margin-top:6px">${EG.map(linea).join("")||`<div class="empty">No hay pagos proyectados para esta semana.</div>`}</div>
-    ${I.length?`<h3 style="margin-top:12px">Cobros esperados</h3><div class="list" style="margin-top:6px">${I.map(linea).join("")}</div>`:""}
-    <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn pri sm" data-pnew="egreso">+ Pago</button><button class="btn sm" data-pnew="ingreso">+ Cobro esperado</button><button class="btn sm" id="pr_admin">Administrativos (${P.items.filter(i=>i.obra==="_admin"&&i.tipo==="egreso").length})</button></div></section>
+    <div class="list" style="margin-top:6px">${EG.map(l=>linea(l,"normal")).join("")||`<div class="empty">No hay pagos proyectados para esta semana.</div>`}${gf?"":movE.map(l=>linea(l,"movida")).join("")}</div>
+    ${!gf&&(I.length||movI.length)?`<h3 style="margin-top:12px">Cobros esperados</h3><div class="list" style="margin-top:6px">${I.map(l=>linea(l,"normal")).join("")}${movI.map(l=>linea(l,"movida")).join("")}</div>`:""}
+    <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn pri sm" data-pnew="egreso">+ Pago</button><button class="btn sm" data-pnew="ingreso">+ Cobro esperado</button><button class="btn sm" id="pr_admin">Administrativos (${P.items.filter(i=>i.obra==="_admin"&&i.tipo==="egreso").length})</button></div></section>`}
   ${tablaMesProy()}`}
 function fdia(f){return ["dom","lun","mar","mié","jue","vie","sáb"][dt(f).getDay()]+" "+fdate(f).slice(0,5)}
 function tablaMesProy(){
   const P=proy(),mes=S.filt.pmes||hoy().slice(0,7),[y,m]=mes.split("-").map(Number);
   const prim=finSemana(mes+"-01"),ult=mismoDia(mes,31);const sabs=[];for(let s2=prim;s2.slice(0,7)===mes||s2<=ult;s2=addDias(s2,7)){if(s2.slice(0,7)!==mes)break;sabs.push(s2)}
-  const L=lineasProy(iniSemana(sabs[0]),sabs[sabs.length-1]);
+  const sabHoy=finSemana(hoy());
+  const L=[...lineasProy(iniSemana(sabs[0]),sabs[sabs.length-1]),...pendientesHasta(iniSemana(sabs[0]))].map(l=>estadoLinea(l,P)).map(l=>{if(!l.pend)return l;
+    let cae=l.pend.pagEn?finSemana(l.pend.pagEn):addDias(finSemana(l.f),7);if(!l.pend.pagEn&&cae<sabHoy)cae=sabHoy;return {...l,f:cae}}).filter((l,i,a)=>a.findIndex(x=>x.k===l.k)===i&&l.f>=iniSemana(sabs[0])&&l.f<=sabs[sabs.length-1]);
   const obrasE=[...new Set(L.filter(l=>l.tipo==="egreso"&&!l.obra.startsWith("_")).map(l=>l.obra))];
   const obrasI=[...new Set(L.filter(l=>l.tipo==="ingreso").map(l=>l.obra))];
   const emp_=l=>l.obra.startsWith("_");
@@ -2617,8 +2652,15 @@ function bindProyeccion(V){
   V.querySelectorAll("[data-pgrp]").forEach(b=>b.onclick=()=>{S.filt.pgrp=S.filt.pgrp===b.dataset.pgrp?"":b.dataset.pgrp;render()});
   V.querySelectorAll("[data-pnew]").forEach(b=>b.onclick=()=>openItemProy(null,{tipo:b.dataset.pnew}));
   V.querySelectorAll("[data-ped]").forEach(b=>b.onclick=()=>openItemProy(proy().items.find(i=>i.id===b.dataset.ped)));
-  V.querySelectorAll("[data-pok]").forEach(b=>b.onclick=async()=>{const [id,f]=b.dataset.pok.split("|");const P=proy();const it=P.items.find(i=>i.id===id);if(!it)return;
-    it.pagos={...(it.pagos||{})};if(it.pagos[f])delete it.pagos[f];else it.pagos[f]=true;try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}});
+  V.querySelectorAll("[data-pact]").forEach(b=>b.onclick=async()=>{const k=b.dataset.pk,a=b.dataset.pact,P=proy();P.pend={...(P.pend||{})};P.items=P.items.map(x=>({...x}));
+    const id=k.split("|")[0],f=keyFecha(k),it=P.items.find(x=>x.id===id);const setPag=v=>{if(it){it.pagos={...(it.pagos||{})};if(v)it.pagos[f]=true;else delete it.pagos[f]}};
+    if(a==="pend")P.pend[k]={desde:hoy(),parc:[]};
+    else if(a==="quitar"){delete P.pend[k];setPag(false)}
+    else if(a==="pagar"){if(P.pend[k])P.pend[k]={...P.pend[k],pagEn:hoy()};setPag(true)}
+    else if(a==="despagar"){if(P.pend[k]){const {pagEn,...r}=P.pend[k];P.pend[k]=r}setPag(false)}
+    else if(a==="parcial"){const v=num(prompt("¿Cuánto se pagó ahora? El resto sigue pendiente.")||"");if(!v)return;const pe={...P.pend[k],parc:[...(P.pend[k].parc||[]),{monto:v,fecha:hoy()}]};
+      const L=lineasProy(f,f).find(x=>x.k===k);if(L&&pe.parc.reduce((s2,x)=>s2+x.monto,0)>=L.monto){pe.pagEn=hoy();setPag(true)}P.pend[k]=pe}
+    try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}});
   V.querySelectorAll("[data-paj]").forEach(b=>b.onclick=async()=>{const k=b.dataset.paj,P=proy();const actual=(P.aj||{})[k];
     const v=prompt("Monto para ESTA semana solamente.\nDejalo vacío para volver al monto original.",actual!=null?String(actual):"");if(v===null)return;
     P.aj={...(P.aj||{})};if(v.trim()==="")delete P.aj[k];else P.aj[k]=num(v)||0;try{await guardarProy(P);render()}catch(e){toast(errMsg(e))}});
