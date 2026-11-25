@@ -1567,7 +1567,7 @@ function vLegajo(){
   const rubros=Object.entries(rub).sort((a,b)=>tot(b[1])-tot(a[1]));
   const planH=isAdmin()?planObraHtml(o):"";
   const ultB=S.bit.filter(b=>b.obra===o.id).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,5);
-  return `<div class="row between"><button class="btn sm" data-go="obras">← Obras</button><button class="btn sm" id="legEdit">Editar datos de la obra</button></div>
+  return `<div class="row between"><button class="btn sm" data-go="obras">← Obras</button><div class="row" style="gap:6px">${isAdmin()?`<button class="btn sm" id="legPrint">🖨️ Imprimir ingresos</button>`:""}<button class="btn sm" id="legEdit">Editar datos de la obra</button></div></div>
   <section class="card" style="display:flex;flex-direction:column;gap:6px">
     <div class="row between"><h2>${esc(o.nombre)}</h2><span class="pill ${o.estado==="En curso"?"p-acc":o.estado==="Terminada"?"p-mut":"p-warn"}">${esc(o.estado||"En curso")}</span></div>
     <div class="note">${o.cliente?`Cliente: ${cl?`<a href="#cliente" data-cli="${esc(cl.id)}">${esc(o.cliente)}</a>`:esc(o.cliente)} · `:""}Encargado: ${esc(o.encargado||"—")}${f.ini?" · Desde "+esc(fdate(f.ini)):""}${f.fin?" al "+esc(fdate(f.fin)):""}${o.contratoUsd?" · Contrato "+fmtU(o.contratoUsd):""}</div>
@@ -1598,6 +1598,7 @@ function vLegajo(){
 function bindLegajo(){
   const o=S.obras.find(x=>x.id===S.legObra);if(!o)return;
   const e=$("#legEdit");if(e)e.onclick=()=>openObra(o);
+  const pr=$("#legPrint");if(pr)pr.onclick=()=>imprimirHtml(hojaIngresos(o));
   document.querySelectorAll("[data-pobra]").forEach(x=>x.onclick=()=>openItemProy(null,{tipo:x.dataset.pobra,obra:o.id}));
   document.querySelectorAll("#view [data-ped]").forEach(x=>x.onclick=()=>openItemProy(proy().items.find(i=>i.id===x.dataset.ped)));
   const s=$("#legSrch");if(s)s.onclick=()=>{S.q={t:o.nombre,desde:"",hasta:"",que:"movs"};location.hash="buscar"};
@@ -2465,6 +2466,23 @@ function hojaBit(obraId,d,h,salto,conF){
   <table style="border-collapse:collapse;width:100%"><thead><tr style="background:#eee"><th style="${td};text-align:left">Fecha</th><th style="${td};text-align:left">Estado</th><th style="${td};text-align:left">Motivo / qué se hizo</th><th style="${td}">Jornales</th></tr></thead>
   <tbody>${filas.replace(/<td/g,`<td style="${td}"`).replace(/<td style="([^"]*)" style="/g,'<td style="$1;')}</tbody></table>
   <div style="display:flex;justify-content:space-around;margin-top:48px;text-align:center"><div style="border-top:1px solid #111;width:38%;padding-top:4px">Encargado de obra</div><div style="border-top:1px solid #111;width:38%;padding-top:4px">Dirección de obra</div></div>
+  <div style="margin-top:14px;font-size:10px;color:#777">Generado el ${esc(fdate(hoy()))} · Sinner Construcciones</div></div>`}
+function hojaIngresos(o){
+  const logo=(document.querySelector("img.logo")||{}).src||"",r=resObra(o.id),sd=saldoObra(o,r);
+  const L=S.movs.filter(m=>m.obra===o.id&&m.tipo==="ingreso").sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
+  const td="border:1px solid #ccc;padding:5px 7px;vertical-align:top;text-align:left",tr=td.replace("text-align:left","text-align:right");
+  const filas=L.map(m=>{const u=usdCobro(m),p=valorPesos(m);const cot=esUsd(m)?"en dólares":m.usd&&m.cotizacion?fmt(m.cotizacion):u?fmt(m2(p/u)):"";
+    return `<tr><td style="${td};white-space:nowrap">${esc(fdate(m.fecha))}</td><td style="${td}">${esc((m.detalle||m.categoria||"Cobro").replace(/\s*\[chat\]/g,""))}</td><td style="${td}">${esc(m.caja||"")}</td><td style="${tr};white-space:nowrap">${fmt(p)}</td><td style="${tr};white-space:nowrap">${u?fmtU(m2(u)):"—"}</td><td style="${tr};white-space:nowrap">${cot}</td></tr>`}).join("");
+  const box=(l,v,s2)=>`<td style="${td}">${l}<br><b style="font-size:16px">${v}</b>${s2?`<br><span style="color:#555">${s2}</span>`:""}</td>`;
+  return `<div style="font:12px/1.4 system-ui,sans-serif;color:#111">
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px">
+    ${logo?`<img src="${logo}" style="height:46px">`:`<b>SINNER CONSTRUCCIONES</b>`}<div style="text-align:right"><div style="font-size:16px;font-weight:700">Resumen de ingresos</div><div>al ${esc(fdate(hoy()))}</div></div></div>
+  <div style="font-size:15px;font-weight:700">${esc(o.nombre)}</div>${o.cliente?`<div>Cliente: ${esc(o.cliente)}</div>`:""}${o.direccion?`<div>${esc(o.direccion)}</div>`:""}
+  ${sd?`<table style="border-collapse:collapse;margin:10px 0;width:100%"><tr>${box("Contrato",fmtU(sd.c))}${box("Cobrado",fmtU(Math.round(sd.u))+" ("+sd.pct+"%)",fmt(r.cobros-sd.sinUArs))}${box("Falta cobrar",fmtU(Math.round(sd.falta)),sd.blue?"≈ "+fmt(sd.faltaArs)+" al blue "+fmt(sd.blue):"")}</tr></table>`:""}
+  <table style="border-collapse:collapse;width:100%;margin-top:${sd?0:10}px"><thead><tr style="background:#eee"><th style="${td}">Fecha</th><th style="${td}">Concepto</th><th style="${td}">Caja</th><th style="${tr}">Pesos</th><th style="${tr}">US$</th><th style="${tr}">Cambio</th></tr></thead>
+  <tbody>${filas||`<tr><td style="${td}" colspan="6">Sin cobros cargados.</td></tr>`}</tbody>
+  <tfoot><tr style="font-weight:700;background:#f6f6f6"><td style="${td}" colspan="3">Total (${L.length} cobro${L.length===1?"":"s"})</td><td style="${tr}">${fmt(r.cobros)}</td><td style="${tr}">${r.cobrosU?fmtU(m2(r.cobrosU)):"—"}</td><td style="${td}"></td></tr></tfoot></table>
+  ${sd&&sd.sinU.length?`<div style="margin-top:8px;color:#8a5a00">${sd.sinU.length} cobro${sd.sinU.length>1?"s":""} por ${fmt(sd.sinUArs)} sin dólares asignados: no se descuenta${sd.sinU.length>1?"n":""} del contrato.</div>`:""}
   <div style="margin-top:14px;font-size:10px;color:#777">Generado el ${esc(fdate(hoy()))} · Sinner Construcciones</div></div>`}
 function imprimirHtml(html){const w=document.createElement("div");w.id="printArea";w.innerHTML=html;document.body.appendChild(w);
   document.body.classList.add("imprimiendo");const imgs=[...w.querySelectorAll("img")];
