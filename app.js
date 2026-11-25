@@ -100,7 +100,7 @@ function resObra(id){
 }
 
 /* ---------- navegación ---------- */
-const VERSION="25/11 12:38";
+const VERSION="25/11 12:48";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -2521,10 +2521,10 @@ function openNuevoEnc(op={}){
 
 
 /* ---------- proyección de pagos (solo administración) ---------- */
-const RUB_PROY_E=["Materiales","Mano de obra / subcontrato","Viáticos y combustible","Alquiler y servicios","Impuestos","Seguros","Profesionales","Préstamos y cuotas","Otros"];
+const RUB_PROY_E=["Sueldos","Tarjeta de crédito","Materiales","Mano de obra / subcontrato","Viáticos y combustible","Alquiler y servicios","Impuestos","Seguros","Profesionales","Préstamos y cuotas","Otros"];
 const RUB_PROY_I=["Anticipo","Certificado","Pago de cliente","Préstamo / aporte","Otros"];
 const FREC=[["una","Una sola vez"],["semanal","Todas las semanas"],["quincenal","Cada 15 días"],["mensual","Todos los meses"],["cuotas","En cuotas mensuales"]];
-const proy=()=>({items:[],cot:0,sueldos:true,tarjDia:10,saldoIni:{},...(S.proy||{})});
+const proy=()=>({items:[],cot:0,autoSueldos:false,autoTarjeta:false,tarjDia:10,saldoIni:{},...(S.proy||{})});
 async function guardarProy(P){await db.doc("config/proyeccion").set(P);S.proy=P}
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const dt=f=>new Date(f+"T12:00");
@@ -2546,8 +2546,8 @@ function sueldosEstimados(){const L=[...(S.liqs||[])].filter(l=>l.filas&&l.filas
   Object.keys(ob).forEach(k=>ob[k]=Math.round(ob[k]/L.length));return {obras:ob,fijos:Math.round(fij/L.length),n:L.length}}
 /* todas las líneas (pagos e ingresos) entre a y b */
 function lineasProy(a,b){const P=proy(),out=[];
-  for(const it of P.items)for(const f of ocurrencias(it,a,b))out.push({k:it.id+"|"+f,it,f,tipo:it.tipo,obra:it.obra||"_admin",grupo:it.tipo==="ingreso"?"ing":(it.obra&&it.obra!=="_admin"?"obra":"admin"),concepto:it.concepto,rubro:it.rubro,monto:valorProy(it,P),usd:it.moneda==="USD"?+it.monto:0,pagado:!!(it.pagos||{})[f]});
-  if(P.sueldos){const E=sueldosEstimados();if(E.n)for(let sab=finSemana(a);sab<=b;sab=addDias(sab,7)){
+  for(const it of P.items)for(const f of ocurrencias(it,a,b))out.push({k:it.id+"|"+f,it,f,tipo:it.tipo,obra:it.obra||"_admin",grupo:it.tipo==="ingreso"?"ing":it.rubro==="Sueldos"?"sueldos":it.rubro==="Tarjeta de crédito"?"tarjeta":(it.obra&&it.obra!=="_admin"?"obra":"admin"),concepto:it.concepto,rubro:it.rubro,monto:valorProy(it,P),usd:it.moneda==="USD"?+it.monto:0,pagado:!!(it.pagos||{})[f]});
+  if(P.autoSueldos){const E=sueldosEstimados();if(E.n)for(let sab=finSemana(a);sab<=b;sab=addDias(sab,7)){
     for(const [o,v] of Object.entries(E.obras))if(v)out.push({k:"sj|"+o+"|"+sab,f:sab,tipo:"egreso",obra:o,grupo:"sueldos",concepto:"Sueldos jornaleros (estimado)",rubro:"Sueldos",monto:v,auto:true})}
     for(const e of (S.emp||[]).filter(e=>e.tipo==="fijo"&&e.activo!==false&&+e.sueldoFijo)){const per=e.periodo||"semanal";let fs=[];
       if(per==="semanal")for(let sab=finSemana(a);sab<=b;sab=addDias(sab,7))fs.push(sab);
@@ -2555,7 +2555,7 @@ function lineasProy(a,b){const P=proy(),out=[];
       for(const f of fs)out.push({k:"sf|"+e.id+"|"+f,f,tipo:"egreso",obra:"_sueldos",grupo:"sueldos",concepto:`Sueldo ${e.nombre}${per==="quincenal"?(f.slice(8)==="15"?" (1ª quincena)":" (2ª quincena)"):per==="mensual"?" (mes)":""}`,rubro:"Sueldos",monto:+e.sueldoFijo,auto:true})}}
   for(const l of out){const v=(P.aj||{})[l.k];if(v!=null&&v!==""){l.orig=l.monto;l.monto=+v;l.ajustado=true}}
   const dia=+P.tarjDia||10;
-  for(const m of S.movs.filter(x=>x.pago==="tarjeta"))for(const c of cuotasDe(m)){const f=mismoDia(c.mes,dia);if(f>=a&&f<=b)out.push({k:"tj|"+m.id+"|"+c.n,f,tipo:"egreso",obra:m.obra||"_empresa",grupo:"tarjeta",concepto:`${m.tarjeta||"Tarjeta"}: ${m.detalle||m.categoria||"compra"} (cuota ${c.n} de ${c.de})`,rubro:"Tarjeta",monto:c.monto,auto:true})}
+  if(P.autoTarjeta)for(const m of S.movs.filter(x=>x.pago==="tarjeta"))for(const c of cuotasDe(m)){const f=mismoDia(c.mes,dia);if(f>=a&&f<=b)out.push({k:"tj|"+m.id+"|"+c.n,f,tipo:"egreso",obra:m.obra||"_empresa",grupo:"tarjeta",concepto:`${m.tarjeta||"Tarjeta"}: ${m.detalle||m.categoria||"compra"} (cuota ${c.n} de ${c.de})`,rubro:"Tarjeta",monto:c.monto,auto:true})}
   return out.sort((x,y)=>x.f.localeCompare(y.f)||(x.tipo==="ingreso")-(y.tipo==="ingreso"))}
 const GRUPOS=[["sueldos","Sueldos"],["obra","Gastos de obras"],["admin","Administrativos"],["tarjeta","Tarjeta"]];
 function vProyeccion(){
@@ -2586,9 +2586,10 @@ function tablaMesProy(){
   const P=proy(),mes=S.filt.pmes||hoy().slice(0,7),[y,m]=mes.split("-").map(Number);
   const prim=finSemana(mes+"-01"),ult=mismoDia(mes,31);const sabs=[];for(let s2=prim;s2.slice(0,7)===mes||s2<=ult;s2=addDias(s2,7)){if(s2.slice(0,7)!==mes)break;sabs.push(s2)}
   const L=lineasProy(iniSemana(sabs[0]),sabs[sabs.length-1]);
-  const obrasE=[...new Set(L.filter(l=>l.tipo==="egreso"&&(l.grupo==="obra"||l.grupo==="sueldos"&&l.obra!=="_sueldos"||l.grupo==="tarjeta"&&!l.obra.startsWith("_"))).map(l=>l.obra))];
+  const obrasE=[...new Set(L.filter(l=>l.tipo==="egreso"&&!l.obra.startsWith("_")).map(l=>l.obra))];
   const obrasI=[...new Set(L.filter(l=>l.tipo==="ingreso").map(l=>l.obra))];
-  const colE=[...obrasE.map(o=>[o,obraNombre(o),l=>l.obra===o&&!(l.grupo==="sueldos"&&l.obra==="_sueldos")]),["_sf","Sueldos fijos",l=>l.obra==="_sueldos"],["_adm","Administrativos",l=>l.grupo==="admin"],["_tj","Tarjeta (empresa)",l=>l.grupo==="tarjeta"&&l.obra.startsWith("_")]];
+  const emp_=l=>l.obra.startsWith("_");
+  const colE=[...obrasE.map(o=>[o,obraNombre(o),l=>l.obra===o]),["_sf","Sueldos (empresa)",l=>emp_(l)&&l.grupo==="sueldos"],["_adm","Administrativos",l=>emp_(l)&&(l.grupo==="admin"||l.grupo==="obra")],["_tj","Tarjeta (empresa)",l=>emp_(l)&&l.grupo==="tarjeta"]];
   const colI=obrasI.map(o=>[o,o==="_admin"?"Otros":obraNombre(o)]);
   let acc=+((P.saldoIni||{})[mes])||0;const T={e:{},i:{},te:0,ti:0};
   const td="padding:5px 7px;text-align:right;border-top:1px solid var(--line);white-space:nowrap";
@@ -2610,7 +2611,7 @@ function tablaMesProy(){
     <tr class="note">${colE.map(c=>`<th style="${th}">${esc(c[1])}</th>`).join("")}<th style="${th}" class="neg">Total</th>${colI.map(c=>`<th style="${th}">${esc(c[1])}</th>`).join("")}<th style="${th}" class="pos">Total</th><th style="${th}">Semana</th><th style="${th}">Acumulado</th></tr></thead>
     <tbody>${filas}<tr style="background:var(--soft)"><td style="padding:5px 7px;font-weight:700;border-top:2px solid var(--line);position:sticky;left:0;background:var(--soft)">Total del mes</td>
       ${colE.map(([k])=>`<td style="${td};font-weight:700">${fmt(T.e[k]||0)}</td>`).join("")}<td style="${td};font-weight:700" class="neg">${fmt(T.te)}</td>${colI.map(([o])=>`<td style="${td};font-weight:700">${fmt(T.i[o]||0)}</td>`).join("")}<td style="${td};font-weight:700" class="pos">${fmt(T.ti)}</td><td style="${td};font-weight:700">${fmt(T.ti-T.te)}</td><td style="${td};font-weight:700">${fmt(acc)}</td></tr></tbody></table></div>
-    <p class="note" style="margin:0">Semanas de domingo a sábado. La fila en rojo es la semana en que el acumulado no alcanza.${P.sueldos?" Jornaleros: promedio de las últimas 4 planillas. Sueldos fijos: según la ficha de cada empleado (semanal, quincena o mensual).":""} Cualquier monto se puede cambiar solo para una semana tocando el lápiz ✎.</p></section>`}
+    <p class="note" style="margin:0">Semanas de domingo a sábado. La fila en rojo es la semana en que el acumulado no alcanza.${P.autoSueldos?" Jornaleros: promedio de las últimas 4 planillas. Sueldos fijos: según la ficha de cada empleado (semanal, quincena o mensual).":""} Cualquier monto se puede cambiar solo para una semana tocando el lápiz ✎.</p></section>`}
 function bindProyeccion(V){
   V.querySelectorAll("[data-pmov]").forEach(b=>b.onclick=()=>{S.filt.psem=addDias(S.filt.psem||finSemana(hoy()),7*+b.dataset.pmov);render()});
   V.querySelectorAll("[data-pgrp]").forEach(b=>b.onclick=()=>{S.filt.pgrp=S.filt.pgrp===b.dataset.pgrp?"":b.dataset.pgrp;render()});
@@ -2667,11 +2668,13 @@ function openAdminProy(){const P=proy(),L=P.items.filter(i=>i.obra==="_admin"&&i
 function openCfgProy(){const P=proy();
   openSheet(`<form id="fpc" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Ajustes de la proyección")}
     <label class="f">Cotización para proyectar los montos en dólares<input id="pc_cot" inputmode="numeric" value="${P.cot?esc(String(P.cot)):""}" placeholder="Ej: 1625"></label>
-    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pc_sue" ${P.sueldos?"checked":""}> Sumar los sueldos: jornaleros (promedio de las últimas 4 planillas, cada sábado) y fijos (según la ficha de cada empleado)</label>
+    <p class="note" style="margin:0">Por defecto todo se carga a mano. Si algún día querés que la app sume sola, tildá:</p>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pc_sue" ${P.autoSueldos?"checked":""}> Sueldos automáticos: jornaleros (promedio de las últimas 4 planillas, cada sábado) y fijos (según la ficha de cada empleado)</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pc_tja" ${P.autoTarjeta?"checked":""}> Cuotas de tarjeta automáticas (de las compras con tarjeta cargadas)</label>
     <label class="f">Día del mes en que vence la tarjeta<input id="pc_tj" inputmode="numeric" value="${esc(String(P.tarjDia||10))}"></label>
     <button class="btn pri" type="submit">Guardar</button></form>`,sh=>{
     sh.querySelector("[data-close]").onclick=closeSheet;
-    $("#fpc").onsubmit=async ev=>{ev.preventDefault();const Q={...P,cot:num($("#pc_cot").value)||0,sueldos:$("#pc_sue").checked,tarjDia:Math.min(31,Math.max(1,num($("#pc_tj").value)||10))};try{await guardarProy(Q);closeSheet();toast("Guardado");render()}catch(e){toast(errMsg(e))}}})}
+    $("#fpc").onsubmit=async ev=>{ev.preventDefault();const Q={...P,cot:num($("#pc_cot").value)||0,autoSueldos:$("#pc_sue").checked,autoTarjeta:$("#pc_tja").checked,tarjDia:Math.min(31,Math.max(1,num($("#pc_tj").value)||10))};try{await guardarProy(Q);closeSheet();toast("Guardado");render()}catch(e){toast(errMsg(e))}}})}
 /* plan de la obra (en el legajo) */
 function planObraHtml(o){const P=proy(),L=P.items.filter(i=>i.obra===o.id).sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
   const lin=i=>`<button class="item" data-ped="${esc(i.id)}"><span class="t">${esc(i.concepto||i.rubro)}</span><span class="s">${esc(fdate(i.fecha))}${i.frec&&i.frec!=="una"?" · "+esc(FREC.find(f=>f[0]===i.frec)[1].toLowerCase()):""}${i.rubro?" · "+esc(i.rubro):""}</span><span class="m ${i.tipo==="ingreso"?"pos":""}">${i.moneda==="USD"?fmtU(i.monto):fmt(i.monto)}</span></button>`;
