@@ -120,7 +120,7 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="25/11 16:25";
+const VERSION="26/11 12:08";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
 const isEnc=()=>S.rol==="encargado";
@@ -284,7 +284,8 @@ function vBitacora(){
     <div style="height:8px;border-radius:6px;background:var(--line);overflow:hidden"><div style="height:100%;width:${pct||0}%;background:${pct>=80?"var(--good)":pct>=60?"var(--warn)":"var(--bad)"}"></div></div>
     <div class="note" style="margin:0">Trabajado del mes: días trabajados (los parciales cuentan medio) sobre ${D.length} día${D.length===1?"":"s"} hábil${D.length===1?"":"es"} hasta hoy, de lunes a sábado${ob==="todas"?", sumando todas las obras":""}.</div>
     <div class="grid">${stat("si","Trabajados","pos")}${stat("parcial","Parciales","")}${stat("no","No trabajados","neg")}${stat("sin","Sin registro","")}</div>
-    ${tip?`<button class="btn sm" data-btipo="">Ver todos los días ✕</button>`:`<div class="note" style="margin:0">Tocá un número para ver esos días.</div>`}</section>`:""}
+    ${tip?`<button class="btn sm" data-btipo="">Ver todos los días ✕</button>`:`<div class="note" style="margin:0">Tocá un número para ver esos días.</div>`}
+    ${!isEnc()&&c.sin?`<button class="btn sm" id="bit_rec" style="align-self:flex-start">📲 Enviar recordatorios a encargados</button>`:""}</section>`:""}
   ${tip==="sin"?`<div class="list">${D.filter(d=>d.est==="sin").sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(d=>`<button class="item" data-bsin="${esc(d.obra)}|${esc(d.fecha)}"><span class="t">${esc(fdate(d.fecha))} · ${esc(obraNombre(d.obra))}</span><span class="s">Nadie cargó este día — tocá para cargarlo</span><span class="m"><span class="pill p-mut">Sin registro</span></span></button>`).join("")||`<div class="empty">No hay días sin registro. ¡Bien!</div>`}</div>`
   :`<div class="list">${L.slice(0,300).map(b=>`<button class="item" data-edit-bit="${esc(b.id)}"><span class="t">${esc(fdate(b.fecha))} · ${esc(obraNombre(b.obra))}</span>
     <span class="s">${b.trabajo!=="si"&&b.motivo?esc(b.motivo)+(b.detalle?" — ":""):""}${esc(b.detalle||"")}${b.jornales?` · ${esc(b.jornales)} en obra`:""}${nf(b)}</span><span class="m">${pillTrab(b.trabajo)}</span></button>`).join("")||`<div class="empty">No hay registros${tip?" de ese tipo":""} en este período.</div>`}</div>`}
@@ -900,6 +901,7 @@ function bindView(v){
   V.querySelectorAll("[data-oh]").forEach(b=>b.onclick=()=>{S.filt.oh=b.dataset.oh;render()});
   V.querySelectorAll("[data-bobra]").forEach(b=>b.onclick=()=>{S.filt.bobra=b.dataset.bobra;S.filt.btipo="";render()});
   const bpr=V.querySelector("#bit_print");if(bpr)bpr.onclick=openResumenBit;
+  const br=V.querySelector("#bit_rec");if(br)br.onclick=openRecordatorios;
   const bm=V.querySelector("#bit_mes");if(bm)bm.onchange=()=>{S.filt.bmes=bm.value;S.filt.btipo="";render()};
   V.querySelectorAll("[data-btipo]").forEach(b=>b.onclick=()=>{S.filt.btipo=S.filt.btipo===b.dataset.btipo?"":b.dataset.btipo;render()});
   V.querySelectorAll("[data-bsin]").forEach(b=>b.onclick=()=>{const [o,f]=b.dataset.bsin.split("|");openBit({obra:o,fecha:f})});
@@ -1191,7 +1193,9 @@ function openObra(o){
     $("#o_encNew").onclick=()=>{const P=$("#o_encPanel");if(P.style.display==="flex"){P.style.display="none";return}
       P.innerHTML=camposEnc({sinObras:true})+`<div class="row" style="gap:6px"><button type="button" class="btn pri sm" id="ne_ok">Crear encargado</button><button type="button" class="btn sm" id="ne_no">Cancelar</button></div>`;P.style.display="flex";
       prepCamposEnc(P);$("#ne_no").onclick=()=>{P.style.display="none"};
-      $("#ne_ok").onclick=async()=>{const nu=await crearEnc(P,{obras:[]});if(nu){selEnc.add(nu.id);P.style.display="none";pintarEnc(true)}}};
+      $("#ne_ok").onclick=async()=>{const nu=await crearEnc(P,{obras:[]});if(nu){selEnc.add(nu.id);pintarEnc(true);nu.inv.obras=e?[o.id]:[];nu.inv.obraNueva=e?"":($("#o_nom").value||"").trim();
+        P.innerHTML=`<b>✅ Encargado ${esc(nu.inv.usuario)} creado</b><span class="note" style="margin:0">Mandale el acceso por WhatsApp:</span><div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="btn pri sm" id="ne_wa">📲 Enviar invitación por WhatsApp</button><button type="button" class="btn sm" id="ne_cp">Copiar datos</button><button type="button" class="btn sm" id="ne_fin">Listo</button></div>`;
+        $("#ne_wa").onclick=()=>abrirWa(textoInvitacion(nu.inv),"");$("#ne_cp").onclick=()=>copiarTxt(textoInvitacion(nu.inv));$("#ne_fin").onclick=()=>{P.style.display="none"}}}};
     $("#fo").onsubmit=async ev=>{ev.preventDefault();const n=$("#o_nom").value.trim();if(!n)return toast("Falta el nombre");
       let fin=$("#o_fin").value;if($("#o_est").value==="Terminada"&&!fin)fin=hoy();
       const adics=leerAd();if(adics.some(a=>!a.monto))return toast("A un adicional le falta el monto");
@@ -1488,7 +1492,7 @@ async function openUsers(){
     <form id="nu" class="card" style="display:flex;flex-direction:column;gap:8px;border-color:var(--gold)"><h3>Nuevo usuario</h3>
       <div class="two"><label class="f">Nombre y apellido<input id="nu_nom" required placeholder="Ej: Lucas Fissore"></label>
       <label class="f">Usuario para entrar<input id="nu_user" required autocapitalize="none" placeholder="lucasfissore"></label>
-      <label class="f">Contraseña<input id="nu_pw" required minlength="8" placeholder="Mínimo 8 caracteres"></label>
+      <label class="f">Contraseña<span class="row" style="gap:6px"><input id="nu_pw" required minlength="8" placeholder="Mínimo 8 caracteres" style="flex:1"><button type="button" class="btn sm" data-genpw="nu_pw">Generar</button></span></label>
       <label class="f">Permiso<select id="nu_rol">${rolOpts("encargado")}</select></label>
       <label class="f">Caja (encargados)<select id="nu_caja">${cajaOpts("")}</select></label></div>
       <div id="nu_obw"><span class="note"><b>Obras a cargo</b> (encargados):</span><div class="row" style="margin-top:4px">${obrasCargo().map(o=>`<label class="row" style="font-size:14px;gap:4px"><input type="checkbox" data-nob="${esc(o.id)}"> ${esc(o.nombre)}</label>`).join("")}</div></div>
@@ -1505,6 +1509,7 @@ async function openUsers(){
     sh.querySelector("[data-close]").onclick=closeSheet;
     const nom=$("#nu_nom"),usr=$("#nu_user");let tocado=false;
     usr.oninput=()=>{tocado=true};nom.oninput=()=>{if(!tocado)usr.value=slugUser(nom.value)};
+    bindGenPw(sh);
     const rolUpd=()=>{$("#nu_obw").style.display=$("#nu_rol").value==="encargado"?"":"none"};$("#nu_rol").onchange=rolUpd;rolUpd();
     if(S.preRol){$("#nu_rol").value=S.preRol;S.preRol=null;rolUpd();setTimeout(()=>nom.focus(),50)}
     $("#nu").onsubmit=async ev=>{ev.preventDefault();const u=slugUser(usr.value);
@@ -1512,8 +1517,10 @@ async function openUsers(){
       if($("#nu_rol").value==="encargado"&&!$("#nu_caja").value&&!confirm0())return;
       const {data:nid,error}=await sb.rpc("admin_crear_usuario",{p_usuario:u,p_password:$("#nu_pw").value,p_nombre:nom.value.trim(),p_rol:$("#nu_rol").value,p_caja:$("#nu_caja").value});
       if(error)return toast(error.message.replace(/^.*?:\s*/,"")||"No se pudo crear");
-      if(nid&&$("#nu_rol").value==="encargado")await asignarObras(nid,[...sh.querySelectorAll("[data-nob]:checked")].map(i=>i.dataset.nob));
-      toast("Usuario "+u+" creado");closeSheet();setTimeout(openUsers,100)};
+      const obs=[...sh.querySelectorAll("[data-nob]:checked")].map(i=>i.dataset.nob);
+      if(nid&&$("#nu_rol").value==="encargado")await asignarObras(nid,obs);
+      const inv={id:nid,nombre:nom.value.trim(),usuario:u,pw:$("#nu_pw").value,rol:$("#nu_rol").value,obras:obs};
+      toast("Usuario "+u+" creado");closeSheet();setTimeout(()=>invitarSheet(inv,()=>setTimeout(openUsers,100)),120)};
     function confirm0(){toast("A un encargado elegile su caja para que pueda cargar gastos");return false}
     sh.querySelectorAll("[data-u]").forEach(card=>{
       const v=k=>card.querySelector(`[data-k="${k}"]`).value,id=card.dataset.u;
@@ -1522,7 +1529,8 @@ async function openUsers(){
         const {error}=await sb.from("perfiles").update({nombre:v("nombre").trim(),rol:v("rol"),caja:v("caja")||null}).eq("id",id);
         if(error)return toast("No se pudo guardar");
         if(card.querySelector("[data-ob]"))await asignarObras(id,[...card.querySelectorAll("[data-ob]:checked")].map(i=>i.dataset.ob));
-        if(v("pw")){const r=await sb.rpc("admin_cambiar_password",{p_id:id,p_password:v("pw")});if(r.error)return toast(r.error.message.replace(/^.*?:\s*/,""));card.querySelector('[data-k="pw"]').value="";toast("Guardado, con contraseña nueva");return}
+        if(v("pw")){const r=await sb.rpc("admin_cambiar_password",{p_id:id,p_password:v("pw")});if(r.error)return toast(r.error.message.replace(/^.*?:\s*/,""));const pwN=v("pw");card.querySelector('[data-k="pw"]').value="";toast("Guardado, con contraseña nueva");
+          const uu=data.find(x=>x.id===id)||{};closeSheet();setTimeout(()=>invitarSheet({id,nombre:v("nombre")||uu.nombre,usuario:verUsuario(uu),pw:pwN,rol:v("rol"),cambio:true},()=>setTimeout(openUsers,100)),120);return}
         toast("Guardado")};
       const d=card.querySelector("[data-delu]");
       if(d)d.onclick=async()=>{if(!d.dataset.sure){d.dataset.sure=1;d.textContent="Tocá de nuevo para borrar";return}
@@ -2552,7 +2560,7 @@ function vEncargados(){
       ${u.caja?`<button class="btn sm" data-ecaja="${esc(u.caja)}" style="text-align:right">Caja ${esc(u.caja)}<br><b>${fmt(sal.ars)}</b>${sal.usd?` · ${fmtU(sal.usd)}`:""}</button>`:`<span class="pill p-warn">Sin caja</span>`}</div>
       <div class="chips">${obs.map(o=>`<span class="chip" aria-pressed="true">${esc(o.nombre)}</span>`).join("")||`<span class="note">Sin obras asignadas</span>`}</div>
       <div class="note" style="margin:0">Bitácora: ${ult?`último registro ${esc(fdate(ult))}`:"todavía no cargó nada"} · ${sin?`<b style="color:var(--warn)">${sin} día${sin===1?"":"s"} sin registro este mes</b>`:"al día este mes ✔"}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" data-eobras="${esc(u.id)}">Asignar obras</button><button class="btn sm" data-epw="${esc(u.id)}">Cambiar contraseña</button><button class="btn sm danger" data-equitar="${esc(u.id)}">Quitar acceso</button></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" data-eobras="${esc(u.id)}">Asignar obras</button><button class="btn sm" data-epw="${esc(u.id)}">Cambiar contraseña</button>${sin?`<button class="btn sm" data-erec="${esc(u.id)}">📲 Recordar bitácora</button>`:""}<button class="btn sm" data-etel="${esc(u.id)}">${telDe(u.id)?"WhatsApp: "+esc(telDe(u.id).replace(/^549?/,"")):"Agregar WhatsApp"}</button><button class="btn sm danger" data-equitar="${esc(u.id)}">Quitar acceso</button></div>
     </section>`}).join("")||`<div class="card empty">Todavía no hay encargados. Tocá “+ Nuevo encargado”.</div>`}`}
 function bindEncargados(V){
   const n=V.querySelector("#enc_new");if(n)n.onclick=()=>openNuevoEnc({alTerminar:()=>cargarPerfiles(true)});
@@ -2563,8 +2571,11 @@ function bindEncargados(V){
       <p class="note" style="margin:0">Solo va a ver y cargar en las obras tildadas.</p><button class="btn pri" id="ao_ok">Guardar</button></div>`,sh=>{
       sh.querySelector("[data-close]").onclick=closeSheet;
       $("#ao_ok").onclick=async()=>{try{await asignarObras(u.id,[...sh.querySelectorAll("[data-ao]:checked")].map(i=>i.dataset.ao));await sincNombresEnc();closeSheet();toast("Obras asignadas");render()}catch(e){toast(errMsg(e))}}})});
+  V.querySelectorAll("[data-erec]").forEach(b=>b.onclick=()=>{const x=faltantesEnc(hoy().slice(0,7)).find(y=>y.u.id===b.dataset.erec);if(x)abrirWa(textoRecordatorio(x),telDe(x.u.id))});
+  V.querySelectorAll("[data-etel]").forEach(b=>b.onclick=async()=>{const t=prompt("Número de WhatsApp (ej: 351 555 1234). Vacío para borrarlo:",telDe(b.dataset.etel).replace(/^549?/,""));if(t===null)return;await guardarTel(b.dataset.etel,t);render()});
   V.querySelectorAll("[data-epw]").forEach(b=>b.onclick=async()=>{const pw=prompt("Contraseña nueva (mínimo 8 caracteres). Anotala: después no se puede ver.");if(!pw)return;if(pw.length<8)return toast("Tiene que tener al menos 8 caracteres");
-    const r=await sb.rpc("admin_cambiar_password",{p_id:b.dataset.epw,p_password:pw});toast(r.error?r.error.message.replace(/^.*?:\s*/,""):"Contraseña cambiada")});
+    const r=await sb.rpc("admin_cambiar_password",{p_id:b.dataset.epw,p_password:pw});if(r.error)return toast(r.error.message.replace(/^.*?:\s*/,""));
+    const uu=S.perfiles.find(x=>x.id===b.dataset.epw)||{};toast("Contraseña cambiada");invitarSheet({id:uu.id,nombre:uu.nombre,usuario:verUsuario(uu),pw,rol:"encargado",cambio:true})});
   V.querySelectorAll("[data-equitar]").forEach(b=>b.onclick=async()=>{if(!b.dataset.sure){b.dataset.sure=1;b.textContent="¿Seguro? Tocá de nuevo";return}
     const {error}=await sb.from("perfiles").update({rol:"pendiente"}).eq("id",b.dataset.equitar);if(error)return toast("No se pudo");await asignarObras(b.dataset.equitar,[]);await sincNombresEnc();toast("Ya no puede entrar. Sus datos cargados quedan.");cargarPerfiles(true)});
 }
@@ -2573,11 +2584,11 @@ async function sincNombresEnc(){const L=S.perfiles||[];for(const o of S.obras){i
 function camposEnc(op={}){const cajasEnc=CAJAS.filter(c=>!["General","Federico","Numa"].includes(c));
   return `<div class="two"><label class="f">Nombre y apellido<input id="ne_nom" placeholder="Ej: Juan Pérez"></label>
     <label class="f">Usuario para entrar<input id="ne_user" autocapitalize="none" placeholder="juanperez"></label>
-    <label class="f">Contraseña<input id="ne_pw" minlength="8" placeholder="Mínimo 8 caracteres"></label>
+    <label class="f">Contraseña<span class="row" style="gap:6px"><input id="ne_pw" minlength="8" placeholder="Mínimo 8 caracteres" style="flex:1"><button type="button" class="btn sm" data-genpw="ne_pw">Generar</button></span></label>
     <label class="f">Caja<select id="ne_caja"><option value="__nueva">Crear caja propia con su nombre</option>${cajasEnc.map(c=>`<option>${esc(c)}</option>`).join("")}<option value="">Sin caja (no carga gastos)</option></select></label></div>
     ${op.sinObras?`<p class="note" style="margin:0">Queda tildado en esta obra; se guarda cuando guardes la obra.</p>`:`<div><span class="note"><b>Obras a cargo</b>:</span><div class="row" style="margin-top:4px;flex-wrap:wrap">${obrasCargo().filter(o=>!o.id.startsWith("_")).map(o=>`<label class="row" style="font-size:14px;gap:4px"><input type="checkbox" data-neo="${esc(o.id)}" ${o.id===op.obraPre?"checked":""}> ${esc(o.nombre)}</label>`).join("")}</div></div>`}
     <p class="note" style="margin:0">Anotá el usuario y la contraseña en tu lista: la contraseña después no se puede ver, solo cambiar.</p>`}
-function prepCamposEnc(R){const nom=R.querySelector("#ne_nom"),usr=R.querySelector("#ne_user");let tocado=false;usr.oninput=()=>{tocado=true};nom.oninput=()=>{if(!tocado)usr.value=slugUser(nom.value)};setTimeout(()=>nom.focus(),60)}
+function prepCamposEnc(R){bindGenPw(R);const nom=R.querySelector("#ne_nom"),usr=R.querySelector("#ne_user");let tocado=false;usr.oninput=()=>{tocado=true};nom.oninput=()=>{if(!tocado)usr.value=slugUser(nom.value)};setTimeout(()=>nom.focus(),60)}
 async function crearEnc(R,op={}){const q=x=>R.querySelector(x);const u=slugUser(q("#ne_user").value),nombre=q("#ne_nom").value.trim(),pw=q("#ne_pw").value;
   if(!nombre)return toast("Falta el nombre"),null;if(u.length<3)return toast("El usuario tiene que tener al menos 3 letras"),null;if(pw.length<8)return toast("La contraseña tiene que tener al menos 8 caracteres"),null;
   let caja=q("#ne_caja").value;
@@ -2588,12 +2599,12 @@ async function crearEnc(R,op={}){const q=x=>R.querySelector(x);const u=slugUser(
     const obs=op.obras||[...R.querySelectorAll("[data-neo]:checked")].map(i=>i.dataset.neo);
     if(nid&&obs.length)await asignarObras(nid,obs);
     await cargarPerfiles(true);if(obs.length)await sincNombresEnc();
-    toast(`Encargado ${u} creado${caja?" · caja "+caja:""}`);return nid?{id:nid,nombre}:null}
+    toast(`Encargado ${u} creado${caja?" · caja "+caja:""}`);return nid?{id:nid,nombre,inv:{id:nid,nombre,usuario:u,pw,rol:"encargado",obras:obs,caja}}:null}
   catch(e){toast(errMsg(e));return null}}
 function openNuevoEnc(op={}){
   openSheet(`<form id="ne" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Nuevo encargado")}${camposEnc(op)}<button class="btn pri" type="submit">Crear encargado</button></form>`,sh=>{
     sh.querySelector("[data-close]").onclick=closeSheet;prepCamposEnc(sh);
-    $("#ne").onsubmit=async ev=>{ev.preventDefault();const nu=await crearEnc(sh);if(nu){closeSheet();if(op.alTerminar)op.alTerminar(nu)}}})}
+    $("#ne").onsubmit=async ev=>{ev.preventDefault();const nu=await crearEnc(sh);if(nu){closeSheet();if(op.alTerminar)op.alTerminar(nu);setTimeout(()=>invitarSheet(nu.inv),150)}}})}
 
 
 /* ---------- proyección de pagos (solo administración) ---------- */
@@ -2831,3 +2842,50 @@ function openAdic(o,a){const e=!!a;a=a||{fecha:hoy(),moneda:"USD",estado:"presup
         if(nuevoAprob&&confirm("¿Querés agendar el cobro de este adicional en la proyección de pagos?"))setTimeout(()=>openItemProy(null,{tipo:"ingreso",obra:o.id,concepto:"Adicional: "+d.concepto,rubro:"Pago de cliente",moneda:d.moneda,monto:d.monto,fecha:hoy()}),150)}
       catch(err){toast(errMsg(err))}};
   })}
+
+
+/* ---------- invitaciones y recordatorios por WhatsApp ---------- */
+const urlApp=()=>location.origin+location.pathname;
+function genPw(){return "sinner-"+String(1000+Math.floor(Math.random()*9000))}
+function bindGenPw(R){R.querySelectorAll("[data-genpw]").forEach(b=>b.onclick=()=>{const i=R.querySelector("#"+b.dataset.genpw)||$("#"+b.dataset.genpw);if(i){i.value=genPw();i.dispatchEvent(new Event("input"))}})}
+const telDe=id=>((S.cfg.telefonos||{})[id]||"");
+function normTel(t){let d=String(t||"").replace(/\D/g,"");if(!d)return "";if(d.startsWith("0"))d=d.slice(1);if(!d.startsWith("54"))d="54"+(d.length===10?"9":"")+d;else if(d.length===12)d="549"+d.slice(2);return d}
+function abrirWa(texto,tel){window.open("https://wa.me/"+(normTel(tel)||"")+"?text="+encodeURIComponent(texto),"_blank")}
+async function copiarTxt(t){try{await navigator.clipboard.writeText(t);toast("Copiado")}catch(_){prompt("Copiá el texto:",t)}}
+async function guardarTel(id,tel){if(!id)return;const n=normTel(tel);if(n===telDe(id))return;const {id:_i,_por:_p,...resto}=S.cfg;const T={...(S.cfg.telefonos||{})};if(n)T[id]=n;else delete T[id];try{await db.doc("config/general").set({...resto,telefonos:T});S.cfg.telefonos=T}catch(_){}}
+function textoInvitacion(v){const nom=(v.nombre||v.usuario||"").split(/\s+/)[0];
+  const obras=(v.obras||[]).map(id=>obraNombre(id)).concat(v.obraNueva?[v.obraNueva]:[]).filter(Boolean);
+  const instal="📲 Para tenerla como app en el celular: abrí el link → en iPhone tocá Compartir y \"Agregar a inicio\"; en Android, menú ⋮ y \"Agregar a pantalla de inicio\".";
+  if(v.cambio)return `Hola ${nom}! 👋 Te cambié la contraseña de la app de Sinner Construcciones.\n\n🔗 ${urlApp()}\n👤 Usuario: ${v.usuario}\n🔑 Contraseña nueva: ${v.pw}\n\nCualquier duda, avisame.`;
+  return `Hola ${nom}! 👋 Te creé el acceso a la app de *Sinner Construcciones*.\n\n🔗 Entrá desde acá: ${urlApp()}\n👤 Usuario: ${v.usuario}\n🔑 Contraseña: ${v.pw}\n\n`+
+    (v.rol==="encargado"?`Desde la app vas a poder cargar los gastos de tu caja, los jornales, la bitácora diaria y las fotos del avance${obras.length?` de: ${obras.join(", ")}`:""}.\n\n`:"")+
+    `${instal}\n\nCualquier duda, avisame.`}
+function invitarSheet(v,alCerrar){
+  openSheet(`<div style="display:flex;flex-direction:column;gap:12px">${sheetHead(v.cambio?"Contraseña cambiada":"✅ Usuario creado")}
+    <div class="card" style="margin:0;background:var(--soft)"><div>👤 Usuario: <b>${esc(v.usuario)}</b></div><div>🔑 Contraseña: <b>${esc(v.pw)}</b></div></div>
+    <label class="f">WhatsApp de ${esc((v.nombre||v.usuario||"").split(/\s+/)[0])} (opcional)<input id="iv_tel" inputmode="tel" value="${esc(telDe(v.id))}" placeholder="Ej: 351 555 1234"><span class="note" style="margin:0;font-weight:400">Si lo ponés, se abre directo su chat y queda guardado para los recordatorios. Si no, elegís el contacto en WhatsApp.</span></label>
+    <details><summary class="note">Ver el mensaje</summary><pre style="white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0 0">${esc(textoInvitacion(v))}</pre></details>
+    <button class="btn pri" id="iv_wa">📲 Enviar ${v.cambio?"la contraseña nueva":"invitación"} por WhatsApp</button>
+    <div class="row" style="gap:6px"><button class="btn sm" id="iv_cp">Copiar datos</button><button class="btn sm" id="iv_ok">Listo</button></div></div>`,sh=>{
+    const fin=()=>{closeSheet();if(alCerrar)alCerrar()};
+    sh.querySelector("[data-close]").onclick=fin;$("#iv_ok").onclick=fin;
+    $("#iv_cp").onclick=()=>copiarTxt(textoInvitacion(v));
+    $("#iv_wa").onclick=()=>{const t=$("#iv_tel").value;abrirWa(textoInvitacion(v),t);guardarTel(v.id,t)}})}
+/* recordatorios de bitácora */
+function faltantesEnc(mes){const fin=new Date(+mes.slice(0,4),+mes.slice(5),0).getDate();
+  return (S.perfiles||[]).filter(u=>u.rol==="encargado").map(u=>{const obs=S.obras.filter(o=>(o.encargados||[]).includes(u.id)&&o.estado!=="Terminada");
+    const D=bitDias(obs,mes+"-01",mes+"-"+String(fin).padStart(2,"0")).filter(d=>d.est==="sin");return {u,obs,D}}).filter(x=>x.D.length)}
+function textoRecordatorio(x){const nom=(x.u.nombre||verUsuario(x.u)).split(/\s+/)[0];const porObra={};x.D.forEach(d=>{(porObra[d.obra]=porObra[d.obra]||[]).push(d.fecha)});
+  return `Hola ${nom}! 👋 Te recuerdo cargar la *bitácora* en la app. Faltan estos días:\n\n`+Object.entries(porObra).map(([o,fs])=>`📒 ${obraNombre(o)}: ${fs.sort().map(f=>fdia(f)).join(", ")}`).join("\n")+
+    `\n\nEntrá acá: ${urlApp()}\nEn Bitácora tocá "Sin registro" y cargá cada día (si no se trabajó, poné el motivo). ¡Gracias!`}
+function openRecordatorios(){const mes=S.filt.bmes&&S.filt.bmes!=="todo"?S.filt.bmes:hoy().slice(0,7);
+  cargarPerfiles().then(()=>{const L=faltantesEnc(mes);
+    openSheet(`<div style="display:flex;flex-direction:column;gap:10px">${sheetHead("Recordatorios de bitácora · "+mlabel(mes))}
+      ${L.length?`<p class="note" style="margin:0">Encargados con días sin cargar en sus obras (de lunes a sábado, hasta hoy).</p>
+      <div class="list">${L.map((x,i)=>`<div class="item" style="cursor:default;display:block"><div class="row between"><b>${esc(x.u.nombre||verUsuario(x.u))}</b><span class="pill p-warn">${x.D.length} día${x.D.length===1?"":"s"}</span></div>
+        <div class="note" style="margin:4px 0">${esc(x.obs.map(o=>o.nombre).join(", "))} · ${esc(x.D.slice(-6).map(d=>fdia(d.fecha)).join(", "))}${x.D.length>6?"…":""}</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn pri sm" data-rwa="${i}">📲 Enviar recordatorio</button><button class="btn sm" data-rcp="${i}">Copiar</button>${telDe(x.u.id)?"":`<span class="note" style="margin:0">Sin número guardado: vas a elegir el contacto</span>`}</div></div>`).join("")}</div>`
+      :`<div class="empty">Todos los encargados tienen la bitácora al día este mes ✔</div>`}</div>`,sh=>{
+      sh.querySelector("[data-close]").onclick=closeSheet;
+      sh.querySelectorAll("[data-rwa]").forEach(b=>b.onclick=()=>{const x=L[+b.dataset.rwa];abrirWa(textoRecordatorio(x),telDe(x.u.id));b.textContent="✓ Enviado"});
+      sh.querySelectorAll("[data-rcp]").forEach(b=>b.onclick=()=>copiarTxt(textoRecordatorio(L[+b.dataset.rcp])))})})}
