@@ -120,8 +120,8 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="27/11 12:09";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda"];
+const VERSION="27/11 15:11";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda","sec-inicio","sec-dinero","sec-obras","sec-personal","sec-empresa","sec-admin"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -148,7 +148,9 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  const sc=!enc&&!v.startsWith("sec-")?seccionDe(v):null;
+  if(sc)top+=`<button class="btn sm" data-secback="${sc}" style="margin-bottom:6px;width:auto;align-self:flex-start;justify-self:start">‹ ${esc(SECC[sc][1])}</button>`;
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,"sec-inicio":()=>vSeccion("inicio"),"sec-dinero":()=>vSeccion("dinero"),"sec-obras":()=>vSeccion("obras"),"sec-personal":()=>vSeccion("personal"),"sec-empresa":()=>vSeccion("empresa"),"sec-admin":()=>vSeccion("admin"),encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -865,6 +867,8 @@ function bindView(v){
   if(v==="encargados")bindEncargados(V);
   if(v==="proyeccion")bindProyeccion(V);
   if(v==="agenda")bindAgenda(V);
+  if(v.startsWith("sec-"))bindSeccion(V);
+  const bk=V.querySelector("[data-secback]");if(bk)bk.onclick=()=>location.hash="sec-"+bk.dataset.secback;
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
@@ -1489,7 +1493,7 @@ async function openUsers(){
   const rolOpts=sel=>[["encargado","Encargado de obra"],["admin","Administración"],["pendiente","Sin acceso"]].map(([v,l])=>`<option value="${v}" ${sel===v?"selected":""}>${l}</option>`).join("");
   const cajaOpts=sel=>`<option value="">—</option>${CAJAS.map(c=>`<option ${sel===c?"selected":""}>${c}</option>`).join("")}`;
   openSheet(`<div style="display:flex;flex-direction:column;gap:12px">${sheetHead("Usuarios y permisos")}
-    <p class="note" style="margin:0"><b>Administración</b> ve y carga todo. <b>Encargado</b> solo carga gastos de su caja, jornales y bitácora.</p>
+    <div class="row between" style="gap:8px"><p class="note" style="margin:0"><b>Administración</b> ve y carga todo. <b>Encargado</b> solo carga gastos de su caja, jornales y bitácora.</p><button type="button" class="btn sm" id="nu_link">🔗 Link de la app</button></div>
     <form id="nu" class="card" style="display:flex;flex-direction:column;gap:8px;border-color:var(--gold)"><h3>Nuevo usuario</h3>
       <div class="two"><label class="f">Nombre y apellido<input id="nu_nom" required placeholder="Ej: Lucas Fissore"></label>
       <label class="f">Usuario para entrar<input id="nu_user" required autocapitalize="none" placeholder="lucasfissore"></label>
@@ -1511,6 +1515,7 @@ async function openUsers(){
     const nom=$("#nu_nom"),usr=$("#nu_user");let tocado=false;
     usr.oninput=()=>{tocado=true};nom.oninput=()=>{if(!tocado)usr.value=slugUser(nom.value)};
     bindGenPw(sh);
+    $("#nu_link").onclick=()=>copiarYCompartir();
     const rolUpd=()=>{$("#nu_obw").style.display=$("#nu_rol").value==="encargado"?"":"none"};$("#nu_rol").onchange=rolUpd;rolUpd();
     if(S.preRol){$("#nu_rol").value=S.preRol;S.preRol=null;rolUpd();setTimeout(()=>nom.focus(),50)}
     $("#nu").onsubmit=async ev=>{ev.preventDefault();const u=slugUser(usr.value);
@@ -1989,28 +1994,37 @@ function pintarHoy(){const el=document.getElementById("hoyBar");if(!el)return;
 function menuItems(){
   const enc=isEnc();
   if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["agenda","📅","Agenda"]]]];
-  return [["Agenda",[["agenda","📅","Agenda"]]],
-    ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
-    ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["proyeccion","📈","Proyección de pagos"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
-    ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["encargados","🦺","Encargados"],["presupuestos","📐","Precios y presupuestos"]]],
-    ["Empresa",[["empresa","🏢","Empresa: gastos, herramientas y vehículos"],["clientes","🤝","Clientes"],["proveedores","🚚","Proveedores"]]]];
+  return [["",[["sec-inicio","🏠","Inicio"],["agenda","📅","Agenda"],["sec-dinero","💵","Dinero"],["sec-obras","🏗️","Obras"],["sec-personal","👥","Personal"],["sec-empresa","🏢","Empresa"],["sec-admin","⚙️","Administración"]]]];
 }
+const SECC={
+  inicio:["🏠","Inicio",[["portada","🏠","Pantalla de inicio","Lo del día y accesos rápidos"],["inicio","📊","Resumen del mes","Ingresos, gastos y obras"],["buscar","🔎","Buscar","Cualquier movimiento o dato"]]],
+  dinero:["💵","Dinero",[["caja","💵","Cajas y movimientos","Saldos de cada caja"],["cierre","🔒","Apertura y cierre","Cierre diario de cajas"],["usd","💲","Dólares y cambios","Pases y cambios"],["tarjetas","💳","Tarjetas de crédito","Compras y cuotas"],["proyeccion","📈","Proyección de pagos","Qué hay que pagar cada semana"],["fede","👤","Caja de Federico","Ingresos y gastos personales"]],[["pagorem","📄","Pago con remito"]]],
+  obras:["🏗️","Obras",[["obras","🏗️","Obras","Legajos, contratos y adicionales"],["bitacora","📒","Bitácora","Días trabajados y fotos"],["jornales","👷","Jornales","Personas por obra y día"],["presupuestos","📐","Precios y presupuestos","Lista de precios y calculadora"]],[["newobra","🏗️","Obra"]]],
+  personal:["👥","Personal",[["sueldos","🧾","Sueldos","Planillas y pagos"],["jornales","👷","Jornales","Personas por obra y día"],["encargados","🦺","Encargados","Accesos y obras a cargo"],["sueldos|emp","🪪","Empleados","Fichas, jornal y sueldo fijo"]],[["newenc","🦺","Encargado"]]],
+  empresa:["🏢","Empresa",[["empresa","🏢","Gastos, herramientas y vehículos","Galpón y gastos generales"],["clientes","🤝","Clientes","Fichas y legajos"],["proveedores","🚚","Proveedores","Contactos y compras"]],[["newcli","🤝","Cliente"],["newprov","🚚","Proveedor"],["newherr","🛠️","Herramienta"]]],
+  admin:["⚙️","Administración",[["@users","👥","Usuarios y contraseñas","Crear, cambiar y compartir accesos"],["@cfg","⚙️","Ajustes","Precios, jornal y saldos"],["@pack","📥","Importar datos","Archivos .json"],["@backup","💾","Copia de seguridad","Descargar todo"],["@link","🔗","Link de la app","Compartir por WhatsApp o copiar"]]]};
+function seccionDe(v){if(v==="portada"||v==="agenda")return null;for(const [k,[, ,L]] of Object.entries(SECC))if(L.some(x=>x[0].split("|")[0]===v))return k;return null}
+function vSeccion(k){const [ic,t,L,N]=SECC[k];
+  return `<h2>${ic} ${esc(t)}</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px">${L.map(([v,i,tt,sub])=>`<button class="card" data-secgo="${esc(v)}" style="text-align:left;cursor:pointer;margin:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:24px">${i}</span><b>${esc(tt)}</b><span class="note" style="margin:0">${esc(sub)}</span></button>`).join("")}</div>
+  ${N&&N.length?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:12px">${N.map(([a,i,tt])=>`<button class="btn pri sm" type="button" data-adm="${a}">+ ${esc(tt)}</button>`).join("")}</div>`:""}`}
+function bindSeccion(V){V.querySelectorAll("[data-secgo]").forEach(b=>b.onclick=()=>{const g=b.dataset.secgo;
+  if(g.startsWith("@")){if(g==="@link")return compartirLink();const x=document.createElement("button");x.dataset.adm=g.slice(1);x.style.display="none";document.body.appendChild(x);x.click();x.remove();return}
+  const [v,sub]=g.split("|");if(v==="sueldos")S.filt.sue=sub||"liq";S.secVolver=cur();location.hash=v})}
+function compartirLink(){const url=location.origin+location.pathname;const txt="App de Sinner Construcciones: "+url;
+  openSheet(`<div style="display:flex;flex-direction:column;gap:10px">${sheetHead("🔗 Link de la app")}
+    <div class="card" style="margin:0;background:var(--soft);word-break:break-all"><b>${esc(url)}</b></div>
+    <button class="btn pri" id="lk_wa">📲 Mandar por WhatsApp</button>
+    <div class="row" style="gap:6px">${navigator.share?`<button class="btn sm" id="lk_sh">Compartir…</button>`:""}<button class="btn sm" id="lk_cp">Copiar link</button></div>
+    <p class="note" style="margin:0">Para crear un usuario con su contraseña y mandarle la invitación completa, usá “Usuarios y contraseñas”.</p></div>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    $("#lk_wa").onclick=()=>abrirWa(txt+"\n\nEntrá con el usuario y la contraseña que te pasé. Para tenerla como app: abrí el link → en iPhone Compartir → \"Agregar a inicio\"; en Android menú ⋮ → \"Agregar a pantalla de inicio\".","");
+    $("#lk_cp").onclick=()=>copiarTxt(url);
+    const shb=$("#lk_sh");if(shb)shb.onclick=()=>navigator.share({title:"Sinner Construcciones",text:"App de Sinner Construcciones",url}).catch(()=>{})})}
 function pintarMenu(){
   const d=$("#drawer"),v=cur();
   d.innerHTML=`<div class="dh"><b>${esc(S.perfil?.nombre||"Menú")}</b><button type="button" class="btn sm" id="menuClose" aria-label="Cerrar menú">✕</button></div>
-  ${menuItems().map(([g,its])=>`<div class="grp">${esc(g)}</div>${its.map(([k,ic,t])=>`<a href="#${k}" ${k===v?'aria-current="page"':""}><span class="ic" aria-hidden="true">${ic}</span>${esc(t)}</a>`).join("")}`).join("")}
-  ${isEnc()?"":`<div class="grp">Cargar nuevo</div>
-    <button type="button" class="it" data-adm="pagorem"><span class="ic" aria-hidden="true">📄</span>Pago con remito</button>
-    <button type="button" class="it" data-adm="newenc"><span class="ic" aria-hidden="true">🦺</span>Encargado</button>
-    <button type="button" class="it" data-adm="newobra"><span class="ic" aria-hidden="true">🏗️</span>Obra</button>
-    <button type="button" class="it" data-adm="newcli"><span class="ic" aria-hidden="true">🤝</span>Cliente</button>
-    <button type="button" class="it" data-adm="newprov"><span class="ic" aria-hidden="true">🚚</span>Proveedor</button>
-    <button type="button" class="it" data-adm="newherr"><span class="ic" aria-hidden="true">🛠️</span>Herramienta</button>
-  <div class="grp">Administración</div>
-    <button type="button" class="it" data-adm="users"><span class="ic" aria-hidden="true">👥</span>Usuarios y contraseñas</button>
-    <button type="button" class="it" data-adm="cfg"><span class="ic" aria-hidden="true">⚙️</span>Ajustes: precios, jornal y saldos</button>
-    <button type="button" class="it" data-adm="pack"><span class="ic" aria-hidden="true">📥</span>Importar datos (.json)</button>
-    <button type="button" class="it" data-adm="backup"><span class="ic" aria-hidden="true">💾</span>Copia de seguridad</button>`}
+  ${menuItems().map(([g,its])=>`${g?`<div class="grp">${esc(g)}</div>`:""}${its.map(([k,ic,t])=>`<a href="#${k}" ${k===v||k==="sec-"+seccionDe(v)?'aria-current="page"':""}><span class="ic" aria-hidden="true">${ic}</span>${esc(t)}</a>`).join("")}`).join("")}
   <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button><div class="grp" style="text-transform:none">Versión ${VERSION}</div>`;
   $("#menuClose").onclick=cerrarMenu;
   d.querySelectorAll("a").forEach(a=>a.onclick=()=>setTimeout(cerrarMenu,0));
@@ -3013,3 +3027,5 @@ async function revisarVersion(){try{const r=await fetch("version.json?t="+Date.n
     document.body.appendChild(d)}}catch(_){}}
 setTimeout(revisarVersion,4000);setInterval(revisarVersion,5*60e3);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")revisarVersion()});
+
+function copiarYCompartir(){const url=location.origin+location.pathname;if(navigator.share)navigator.share({title:"Sinner Construcciones",url}).catch(()=>{});else copiarTxt(url)}
