@@ -120,7 +120,7 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="27/11 10:59";
+const VERSION="27/11 11:32";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
 const isEnc=()=>S.rol==="encargado";
@@ -2923,6 +2923,7 @@ function vAgenda(){
       :`<div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap"><button class="btn sm" data-agnota="${esc(a.id)}">💬 Nota</button>${puedeEditarAg(a)?`<button class="btn sm" data-agpos="${esc(a.id)}|1">Mañana</button><button class="btn sm" data-agpos="${esc(a.id)}|7">+1 semana</button>`:""}${!isEnc()&&a.asignado?`<button class="btn sm" data-agwa="${esc(a.id)}">📲</button>`:""}</div>`}</div></div>`;
   const obrasF=sortObras(S.obras).filter(o=>!o.id.startsWith("_")&&(isEnc()?agVisibles().some(a=>a.obra===o.id):o.estado!=="Terminada"));
   return `<div class="row between"><h2>Agenda</h2><button class="btn pri sm" id="ag_new">+ Pendiente</button></div>
+  ${avisosHtml()}
   <div class="chips">${[["todos","Todos"],["mios","Míos"],["hechos","Hechos"]].map(([k,l])=>`<button class="chip" aria-pressed="${f===k}" data-agf="${k}">${l}</button>`).join("")}
     <select id="ag_ob" style="width:auto"><option value="">Todas las obras</option>${obrasF.map(o=>`<option value="${esc(o.id)}" ${o.id===ob?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></div>
   ${f==="hechos"?`<div class="list">${hechos.slice(0,100).map(item).join("")||`<div class="empty">Todavía no hay pendientes hechos.</div>`}</div>`
@@ -2930,6 +2931,10 @@ function vAgenda(){
 async function guardarAg(a){const {id,_por,...d}=a;await db.collection("agenda").doc(id).set(d)}
 function bindAgenda(V){
   const n=V.querySelector("#ag_new");if(n)n.onclick=()=>openAg();
+  const av=V.querySelector("#av_on");if(av)av.onclick=activarAvisos;
+  const ao=V.querySelector("#av_off");if(ao)ao.onclick=desactivarAvisos;
+  const ap=V.querySelector("#av_test");if(ap)ap.onclick=async()=>{try{const r=await navigator.serviceWorker.ready;await r.showNotification("📅 Prueba de Sinner",{body:"Así te van a llegar los avisos de la agenda.",icon:"icon-192.png"})}catch(e){toast("No se pudo mostrar la prueba")}};
+  estadoAvisos();
   V.querySelectorAll("[data-agf]").forEach(b=>b.onclick=()=>{S.filt.ag=b.dataset.agf;render()});
   const ob=V.querySelector("#ag_ob");if(ob)ob.onchange=()=>{S.filt.agob=ob.value;render()};
   const get=id=>(S.agenda||[]).find(a=>a.id===id);
@@ -2967,3 +2972,33 @@ function openAg(a){const e=!!a;a=a||{fecha:hoy(),rep:"no",asignado:isEnc()?S.uid
         if(!e&&!isEnc()&&asig&&asig!==S.uid&&confirm("¿Le mandás el pendiente por WhatsApp?")){const nom=(d.asignadoNombre||"").split(/\s+/)[0];abrirWa(`Hola ${nom}! 👋 Te dejé un pendiente en la agenda de la app:\n\n📌 ${d.texto}\n📅 ${dlabel(d.fecha)}${d.hora?" · "+d.hora:""}${d.obra?"\n🏗️ "+obraNombre(d.obra):""}${d.detalle?"\n"+d.detalle:""}\n\nCuando esté, tildalo en la app (Agenda): ${urlApp()}`,telDe(asig))}}
       catch(err){toast(errMsg(err))}};
   })}
+
+
+/* ---------- avisos (notificaciones) de la agenda ---------- */
+const soportaPush=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+const esIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
+const instalada=()=>window.matchMedia&&matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+function avisosHtml(){
+  if(esIOS()&&!instalada())return `<div class="banner">🔔 Para recibir los avisos en el iPhone, primero instalá la app: en Safari tocá Compartir → “Agregar a inicio”, y abrila desde ese ícono.</div>`;
+  if(!soportaPush())return "";
+  const st=S.avisos;
+  if(st==="on")return `<div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0"><span>🔔 <b>Avisos activados</b> en este celular: resumen a las 8:00 y aviso media hora antes de cada pendiente con hora.</span><button class="btn sm" id="av_test">Probar</button><button class="btn sm" id="av_off">Desactivar</button></div>`;
+  if(st==="denegado")return `<div class="banner">🔕 Las notificaciones están bloqueadas para la app. Activalas en los ajustes del navegador o del celular y volvé a intentar.</div>`;
+  return `<div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0"><span>🔔 Recibí tus pendientes en el celular: un resumen a las 8:00 y un aviso media hora antes.</span><button class="btn pri sm" id="av_on">Activar avisos</button></div>`}
+async function estadoAvisos(){if(!soportaPush())return;let st="off";
+  try{if(Notification.permission==="denied")st="denegado";else{const r=await navigator.serviceWorker.getRegistration();const sub=r&&await r.pushManager.getSubscription();if(sub&&Notification.permission==="granted")st="on"}}catch(_){}
+  if(st!==S.avisos){S.avisos=st;if(cur()==="agenda")safeRender()}}
+function b64aU8(b){const p="=".repeat((4-b.length%4)%4),s2=(b+p).replace(/-/g,"+").replace(/_/g,"/"),r=atob(s2);return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))}
+async function activarAvisos(){
+  try{const perm=await Notification.requestPermission();if(perm!=="granted"){S.avisos=perm==="denied"?"denegado":"off";render();return toast("No se activaron los avisos")}
+    const reg=await navigator.serviceWorker.register("sw.js");await navigator.serviceWorker.ready;
+    const {data,error}=await sb.functions.invoke("avisos",{body:{accion:"clave"}});
+    if(error||!data||!data.publica)return alert("Los avisos todavía no están activados en el servidor. Avisale a Tami (falta el paso de Supabase: función “avisos” y SQL 12).");
+    let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64aU8(data.publica)});
+    const j=sub.toJSON();const r=await sb.from("push_subs").upsert({endpoint:j.endpoint,sub:j,user_id:S.uid},{onConflict:"endpoint"});
+    if(r.error)return toast("No se pudo guardar: "+r.error.message);
+    S.avisos="on";render();toast("🔔 Avisos activados")}
+  catch(e){toast("No se pudieron activar: "+(e.message||e))}}
+async function desactivarAvisos(){try{const r=await navigator.serviceWorker.getRegistration();const sub=r&&await r.pushManager.getSubscription();
+  if(sub){await sb.from("push_subs").delete().eq("endpoint",sub.endpoint);await sub.unsubscribe()}S.avisos="off";render();toast("Avisos desactivados en este celular")}catch(e){toast(errMsg(e))}}
