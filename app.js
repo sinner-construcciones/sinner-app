@@ -13,7 +13,10 @@ const SIN_OBRA = [
   {id:"_sueldos", nombre:"Sueldos fijos"},
   {id:"_jornales", nombre:"Sueldos de obra (jornaleros)"},
   {id:"_federico", nombre:"Personal Federico"},
-  {id:"_numa", nombre:"Retiros Numa"}
+  {id:"_numa", nombre:"Retiros Numa"},
+  {id:"_suelo", nombre:"Movimiento de Suelo"},
+  {id:"_inmo", nombre:"Desarrollo Inmobiliario"},
+  {id:"_mkt", nombre:"Marketing"}
 ];
 const CATEGORIAS = ["Pago recibido","Comisiones bancarias","Materiales","Pagos","Herramientas y equipos","Combustible","Gastos de empresa","Gastos de empleados","Adelantos de empleados","Sueldos","Sueldos fijos","Gastos de oficina","Alquiler oficina","Tarjeta de crédito","A cobrar","Comida empleados","Vivienda empleados","Viáticos","Mantenimiento vehículos","Personal Federico","Retiros Numa","Varios"];
 const MOTIVOS = ["Lluvia / clima","Demora del hierro","Falta de material","Falta de personal","Espera de definiciones del cliente","Feriado","Problema de equipo","Otro"];
@@ -36,6 +39,12 @@ const dlabel = s=>{const d=new Date(s+"T12:00");return DIAS[d.getDay()]+" "+d.ge
 const mlabel = s=>{const[y,m]=s.split("-");return MESES[+m-1]+" "+y};
 const num = v=>{if(typeof v==="number")return v;const t=String(v||"").trim().replace(/\$/g,"").replace(/\s/g,"");if(!t)return 0;
   const c=t.includes(",")?t.replace(/\./g,"").replace(",","."):(/^\d{1,3}(\.\d{3})+$/.test(t)?t.replace(/\./g,""):t);return parseFloat(c)||0};
+const UNIDADES={cons:["🏗️","Sinner Construcciones","sec-inicio"],suelo:["🚜","Sinner Movimiento de Suelo","ms"],inmo:["🏘️","Sinner Desarrollo Inmobiliario","pronto"],mkt:["📣","Sinner Marketing","pronto"]};
+const unidadDe=m=>m.obra==="_suelo"?"suelo":m.obra==="_inmo"?"inmo":m.obra==="_mkt"?"mkt":"cons";
+const IVAS=[[0,"Sin IVA"],[21,"IVA 21%"],[10.5,"IVA 10,5%"]];
+const duenosMS=()=>S.cfg.duenosMaquinas&&S.cfg.duenosMaquinas.length?S.cfg.duenosMaquinas:["Marcelo","Máximo"];
+const EST_MS=[["espera","Esperando","p-warn"],["aprobado","Aprobado","p-good"],["rechazado","No aprobado","p-mut"]];
+const pillMS=e=>{const x=EST_MS.find(y=>y[0]===(e||"espera"))||EST_MS[0];return `<span class="pill ${x[2]}">${x[1]}</span>`};
 const obraNombre = id=>(S.obras.find(o=>o.id===id)||SIN_OBRA.find(o=>o.id===id)||{nombre:id?"(obra borrada)":"Sin obra"}).nombre;
 const obrasActivas = ()=>S.obras.filter(o=>o.estado!=="Terminada");
 const sortObras = arr=>[...arr].sort((a,b)=>(a.estado==="Terminada")-(b.estado==="Terminada")||a.nombre.localeCompare(b.nombre));
@@ -120,8 +129,8 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="27/11 15:11";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda","sec-inicio","sec-dinero","sec-obras","sec-personal","sec-empresa","sec-admin"];
+const VERSION="27/11 15:18";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda","sec-inicio","sec-dinero","sec-obras","sec-personal","sec-empresa","sec-admin","ms","msd","general","pronto"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
@@ -139,6 +148,7 @@ function render(){
   $("#tabs").style.display="";$("#menuBtn").style.display="";$("#outBtn").style.display="";$("#srchBtn").style.display=enc?"none":"";$("#blueBtn").style.display=enc?"none":"";
   document.querySelectorAll("#tabs button").forEach(b=>{b.style.display=enc&&!VIEWS_ENC.includes(b.dataset.v)?"none":"";if(b.dataset.v==="caja")b.textContent=enc?"Gastos":"Caja"});
   $("#tabs").style.gridTemplateColumns=`repeat(${enc?4:7},1fr)`;
+  if(!enc&&unidadActual()!=="cons")$("#tabs").style.display="none";
   const v=cur();
   document.querySelectorAll("#tabs button").forEach(b=>{if(b.dataset.v===v)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")});
   $("#blueBtn").textContent = "Ajustes";
@@ -150,7 +160,7 @@ function render(){
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
   const sc=!enc&&!v.startsWith("sec-")?seccionDe(v):null;
   if(sc)top+=`<button class="btn sm" data-secback="${sc}" style="margin-bottom:6px;width:auto;align-self:flex-start;justify-self:start">‹ ${esc(SECC[sc][1])}</button>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,"sec-inicio":()=>vSeccion("inicio"),"sec-dinero":()=>vSeccion("dinero"),"sec-obras":()=>vSeccion("obras"),"sec-personal":()=>vSeccion("personal"),"sec-empresa":()=>vSeccion("empresa"),"sec-admin":()=>vSeccion("admin"),encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,"sec-inicio":()=>vSeccion("inicio"),"sec-dinero":()=>vSeccion("dinero"),"sec-obras":()=>vSeccion("obras"),"sec-personal":()=>vSeccion("personal"),"sec-empresa":()=>vSeccion("empresa"),"sec-admin":()=>vSeccion("admin"),ms:vMS,msd:vMSD,general:vGeneral,pronto:vPronto,encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -868,6 +878,8 @@ function bindView(v){
   if(v==="proyeccion")bindProyeccion(V);
   if(v==="agenda")bindAgenda(V);
   if(v.startsWith("sec-"))bindSeccion(V);
+  if(v==="ms"||v==="msd")bindMS(V);
+  if(v==="general"){const g=V.querySelector("#gen_mes");if(g)g.onchange=()=>{S.filt.genmes=g.value;render()}}
   const bk=V.querySelector("[data-secback]");if(bk)bk.onclick=()=>location.hash="sec-"+bk.dataset.secback;
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
@@ -1077,7 +1089,7 @@ function openMov(m,preset){
       if(st.tipo==="egreso"&&$("#m_prov")&&$("#m_prov").value)d.proveedorId=$("#m_prov").value;
       if(st.tipo==="egreso"&&$("#wVeh").style.display!=="none"&&$("#m_veh").value)d.vehiculo=$("#m_veh").value;
       if($("#wUsdRef").style.display!=="none")d.usdRef=num($("#m_usdref").value)||0;
-      for(const k of ["empleadoId","liquidacion","usdRef"])if(m[k]!=null&&d[k]==null)d[k]=m[k];
+      for(const k of ["empleadoId","liquidacion","usdRef","presMS","dueno"])if(m[k]!=null&&d[k]==null)d[k]=m[k];
       const rem=!e&&st.tipo==="egreso"&&$("#m_rem")&&$("#m_rem").checked;
       const nid=await save("movimientos",m.id,d);
       if(nid&&d.tipo==="mover"){const cid=m.comisionMovId||"";const ref=db.collection("movimientos").doc(cid||undefined);
@@ -1804,6 +1816,7 @@ async function cargarTabla(t){
     const li=all.find(r=>r.id==="lista");S.lista=li&&Array.isArray(li.data.items)?li.data.items:null}
   else S[TABLAS[t]]=all.map(r=>({...r.data,id:r.id,_por:r.creado_por}));
   if(t==="obras")S.obras.forEach(o=>{if(typeof o.nombre!=="string"||!o.nombre.trim())o.nombre=o.id;if(!o.estado)o.estado="En curso"});  /* una obra sin nombre no traba la app */
+  if(t==="presupuestos"){S.presMS=S.pres.filter(p=>p.unidad==="suelo");S.pres=S.pres.filter(p=>p.unidad!=="suelo")}
   if(t==="sueldos"){S.liqsPend=S.liqs.filter(l=>String(l.id).startsWith("pend-"));S.liqs=S.liqs.filter(l=>!String(l.id).startsWith("pend-"))}
 }
 async function cargarTodo(){await Promise.all(Object.keys(TABLAS).map(t=>cargarTabla(t)))}
@@ -1994,7 +2007,10 @@ function pintarHoy(){const el=document.getElementById("hoyBar");if(!el)return;
 function menuItems(){
   const enc=isEnc();
   if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["agenda","📅","Agenda"]]]];
-  return [["",[["sec-inicio","🏠","Inicio"],["agenda","📅","Agenda"],["sec-dinero","💵","Dinero"],["sec-obras","🏗️","Obras"],["sec-personal","👥","Personal"],["sec-empresa","🏢","Empresa"],["sec-admin","⚙️","Administración"]]]];
+  const un=unidadActual();
+  if(un==="suelo")return [["",[["ms","🚜","Presupuestos y trabajos"],["msd","👷","Dueños de máquinas"],["agenda","📅","Agenda"],["general","📊","Vista general"],["sec-admin","⚙️","Administración"]]]];
+  if(un==="inmo"||un==="mkt")return [["",[["pronto","🕒","En preparación"],["agenda","📅","Agenda"],["general","📊","Vista general"],["sec-admin","⚙️","Administración"]]]];
+  return [["",[["sec-inicio","🏠","Inicio"],["agenda","📅","Agenda"],["sec-dinero","💵","Dinero"],["sec-obras","🏗️","Obras"],["sec-personal","👥","Personal"],["sec-empresa","🏢","Empresa"],["sec-admin","⚙️","Administración"],["general","📊","Vista general"]]]];
 }
 const SECC={
   inicio:["🏠","Inicio",[["portada","🏠","Pantalla de inicio","Lo del día y accesos rápidos"],["inicio","📊","Resumen del mes","Ingresos, gastos y obras"],["buscar","🔎","Buscar","Cualquier movimiento o dato"]]],
@@ -2024,9 +2040,11 @@ function compartirLink(){const url=location.origin+location.pathname;const txt="
 function pintarMenu(){
   const d=$("#drawer"),v=cur();
   d.innerHTML=`<div class="dh"><b>${esc(S.perfil?.nombre||"Menú")}</b><button type="button" class="btn sm" id="menuClose" aria-label="Cerrar menú">✕</button></div>
+  ${isEnc()?"":`<div style="padding:8px 12px"><select id="unSel" aria-label="Unidad de negocio" style="width:100%;font-weight:700">${Object.entries(UNIDADES).map(([k,[ic,n]])=>`<option value="${k}" ${k===unidadActual()?"selected":""}>${ic} ${esc(n)}</option>`).join("")}</select></div>`}
   ${menuItems().map(([g,its])=>`${g?`<div class="grp">${esc(g)}</div>`:""}${its.map(([k,ic,t])=>`<a href="#${k}" ${k===v||k==="sec-"+seccionDe(v)?'aria-current="page"':""}><span class="ic" aria-hidden="true">${ic}</span>${esc(t)}</a>`).join("")}`).join("")}
   <div class="grp"></div><button type="button" class="it" id="menuOut"><span class="ic" aria-hidden="true">🚪</span>Salir</button><div class="grp" style="text-transform:none">Versión ${VERSION}</div>`;
   $("#menuClose").onclick=cerrarMenu;
+  const us=$("#unSel");if(us)us.onchange=()=>{try{localStorage.setItem("sinner_unidad",us.value)}catch(_){}S.unidad=us.value;cerrarMenu();location.hash=UNIDADES[us.value][2];render()};
   d.querySelectorAll("a").forEach(a=>a.onclick=()=>setTimeout(cerrarMenu,0));
   d.querySelectorAll("[data-adm]").forEach(b=>b.addEventListener("click",()=>cerrarMenu()));
   $("#menuOut").onclick=async()=>{await sb.auth.signOut();location.hash="";location.reload()};
@@ -3029,3 +3047,106 @@ setTimeout(revisarVersion,4000);setInterval(revisarVersion,5*60e3);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")revisarVersion()});
 
 function copiarYCompartir(){const url=location.origin+location.pathname;if(navigator.share)navigator.share({title:"Sinner Construcciones",url}).catch(()=>{});else copiarTxt(url)}
+
+/* ---------- unidades de negocio ---------- */
+function unidadActual(){if(isEnc())return "cons";if(!S.unidad){try{S.unidad=localStorage.getItem("sinner_unidad")||"cons"}catch(_){S.unidad="cons"}}return UNIDADES[S.unidad]?S.unidad:"cons"}
+function vPronto(){const [ic,n]=UNIDADES[unidadActual()];const plan=unidadActual()==="inmo"?"emprendimientos, lotes o unidades, compradores y planes de cuotas":"campañas, publicaciones, consultas que llegan y gastos de publicidad por unidad";
+  return `<h2>${ic} ${esc(n)}</h2><section class="card"><p style="margin:0">Esta unidad está <b>en preparación</b>. Va a tener: ${plan}.</p>
+  <p class="note">Mientras tanto, sus gastos e ingresos se cargan en Caja eligiendo en <b>Obra</b> la opción “${esc(n.replace("Sinner ",""))}” (grupo “Sin obra”), y aparecen en la Vista general.</p>
+  <button class="btn pri sm" data-new="mov">+ Cargar gasto o ingreso</button></section>`}
+function vGeneral(){
+  if(isEnc())return `<div class="empty">Solo administración.</div>`;
+  const mes=S.filt.genmes||hoy().slice(0,7);const meses=[...new Set([hoy().slice(0,7),...S.movs.map(m=>(m.fecha||"").slice(0,7)).filter(Boolean)])].sort().reverse().slice(0,18);
+  const M=S.movs.filter(m=>(m.fecha||"").startsWith(mes)&&(m.tipo==="ingreso"||m.tipo==="egreso")&&m.pago!=="tarjeta"&&m.obra!=="_federico");
+  const T={};for(const k in UNIDADES)T[k]={i:0,e:0};for(const m of M){const u=unidadDe(m);T[u][m.tipo==="ingreso"?"i":"e"]+=valorPesos(m)}
+  const ms=balanceMS(mes);let ti=0,te=0;
+  return `<div class="row between"><h2>📊 Vista general</h2><select id="gen_mes" style="width:auto">${meses.map(x=>`<option value="${x}" ${x===mes?"selected":""}>${esc(mlabel(x))}</option>`).join("")}</select></div>
+  <p class="note" style="margin:0">Ingresos y gastos cargados en las cajas, por unidad de negocio. No incluye pases entre cajas, cambios de dólares ni gastos personales de Federico.</p>
+  ${Object.entries(UNIDADES).map(([k,[ic,n]])=>{const r=T[k];ti+=r.i;te+=r.e;return `<section class="card" style="display:flex;flex-direction:column;gap:6px"><b>${ic} ${esc(n)}</b>
+    <div class="grid"><div><div class="note" style="margin:0">Ingresos</div><b class="pos">${fmt(r.i)}</b></div><div><div class="note" style="margin:0">Gastos</div><b class="neg">${fmt(r.e)}</b></div><div><div class="note" style="margin:0">Resultado</div><b class="${r.i-r.e<0?"neg":"pos"}">${fmt(r.i-r.e)}</b></div></div>
+    ${k==="suelo"&&ms.n?`<div class="note" style="margin:0">Presupuestos del mes: ${ms.n} · aprobados ${ms.ap} (${ms.pct}%) · margen Sinner ${fmt(ms.margen)}</div>`:""}</section>`}).join("")}
+  <section class="card" style="border-color:var(--gold)"><div class="grid"><div><div class="note" style="margin:0">Total ingresos</div><b class="pos">${fmt(ti)}</b></div><div><div class="note" style="margin:0">Total gastos</div><b class="neg">${fmt(te)}</b></div><div><div class="note" style="margin:0">Resultado total</div><b class="${ti-te<0?"neg":"pos"}">${fmt(ti-te)}</b></div></div></section>`}
+
+/* ---------- Movimiento de Suelo ---------- */
+function calcMS(p){const base=+p.precioDueno||0;const com=p.comTipo==="monto"?(+p.comision||0):Math.round(base*(+p.comision||0)/100);const neto=base+com;const iva=Math.round(neto*(+p.iva||0)/100);return {base,com,neto,iva,total:neto+iva,pct:base?Math.round(com/base*1000)/10:0}}
+function balanceMS(mes){const L=(S.presMS||[]).filter(p=>(p.fecha||"").startsWith(mes));const A=L.filter(p=>p.estado==="aprobado");
+  return {n:L.length,ap:A.length,esp:L.filter(p=>p.estado!=="aprobado"&&p.estado!=="rechazado").length,rech:L.filter(p=>p.estado==="rechazado").length,pct:L.length?Math.round(A.length/L.length*100):0,
+    vendido:A.reduce((a,p)=>a+calcMS(p).neto,0),margen:A.reduce((a,p)=>a+calcMS(p).com,0),base:A.reduce((a,p)=>a+calcMS(p).base,0)}}
+function cobradoMS(p){return S.movs.filter(m=>m.presMS===p.id&&m.tipo==="ingreso").reduce((a,m)=>a+valorPesos(m),0)}
+function pagadoMS(p){return S.movs.filter(m=>m.presMS===p.id&&m.tipo==="egreso").reduce((a,m)=>a+valorPesos(m),0)}
+function vMS(){
+  const mes=S.filt.msmes||hoy().slice(0,7),est=S.filt.msest||"",b=balanceMS(mes);
+  const meses=[...new Set([hoy().slice(0,7),...(S.presMS||[]).map(p=>(p.fecha||"").slice(0,7))])].sort().reverse();
+  let L=[...(S.presMS||[])].sort((a,b2)=>(b2.numero||0)-(a.numero||0));if(est)L=L.filter(p=>(p.estado||"espera")===est);
+  return `<div class="row between"><h2>🚜 Movimiento de Suelo</h2><div class="row" style="gap:6px"><button class="btn sm" id="ms_cfg">Ajustes</button><button class="btn pri sm" id="ms_new">+ Presupuesto</button></div></div>
+  <label class="f" style="max-width:240px">Balance del mes<select id="ms_mes">${meses.map(x=>`<option value="${x}" ${x===mes?"selected":""}>${esc(mlabel(x))}</option>`).join("")}</select></label>
+  <div class="grid">
+    <section class="card stat" style="margin:0"><div class="lbl">Presupuestos</div><div class="num">${b.n}</div><div class="note" style="margin:0">${b.ap} aprobados · ${b.esp} esperando · ${b.rech} no</div></section>
+    <section class="card stat" style="margin:0"><div class="lbl">Aprobados</div><div class="num pos">${b.pct}%</div><div class="note" style="margin:0">${b.ap} de ${b.n}</div></section>
+    <section class="card stat" style="margin:0"><div class="lbl">Vendido (aprobados, sin IVA)</div><div class="num">${fmt(b.vendido)}</div></section>
+    <section class="card stat" style="margin:0"><div class="lbl">Margen Sinner</div><div class="num pos">${fmt(b.margen)}</div><div class="note" style="margin:0">${b.base?Math.round(b.margen/b.base*1000)/10+"% sobre el precio de los dueños":""}</div></section></div>
+  <div class="chips">${[["","Todos"],...EST_MS.map(x=>[x[0],x[1]])].map(([k,l])=>`<button class="chip" aria-pressed="${est===k}" data-msest="${k}">${l}</button>`).join("")}</div>
+  <div class="list">${L.map(p=>{const c=calcMS(p);const ap=p.estado==="aprobado";const cob=ap?cobradoMS(p):0,pag=ap?pagadoMS(p):0;
+    return `<div class="item" style="cursor:default;display:block"><div class="row between" style="gap:8px;align-items:flex-start"><span><span class="t">N° ${esc(String(p.numero||""))} · ${esc(p.trabajo||"")}</span><br><span class="s">${esc(fdate(p.fecha))} · ${esc(p.cliente||"")} · máquinas de ${esc(p.dueno||"")}</span></span>
+      <span style="text-align:right"><b>${fmt(c.total)}</b><br>${pillMS(p.estado)}</span></div>
+      <div class="note" style="margin:4px 0 0">Dueño ${fmt(c.base)} + comisión ${fmt(c.com)} (${c.pct}%) = ${fmt(c.neto)}${c.iva?` + IVA ${fmt(c.iva)}`:""}</div>
+      ${ap?`<div class="note" style="margin:2px 0 0">Cobrado ${fmt(cob)} de ${fmt(c.total)} · Pagado a ${esc(p.dueno)} ${fmt(pag)} de ${fmt(c.base)}</div>`:""}
+      <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-msed="${esc(p.id)}">Editar</button><button class="btn sm" data-msprint="${esc(p.id)}">🖨️ / PDF</button><button class="btn sm" data-mswa="${esc(p.id)}">📲</button>
+      ${ap?`<button class="btn sm pri" data-mscob="${esc(p.id)}">+ Cobro</button><button class="btn sm" data-mspag="${esc(p.id)}">+ Pago a ${esc(p.dueno)}</button>`:""}</div></div>`}).join("")||`<div class="empty">Todavía no hay presupuestos. Tocá “+ Presupuesto”.</div>`}</div>`}
+function vMSD(){const D=duenosMS();
+  return `<h2>👷 Dueños de máquinas</h2><p class="note" style="margin:0">Lo que se les debe por los trabajos aprobados (su precio) y lo que ya se les pagó.</p>
+  ${D.map(d=>{const A=(S.presMS||[]).filter(p=>p.estado==="aprobado"&&p.dueno===d);const debe=A.reduce((a,p)=>a+calcMS(p).base,0);const pag=A.reduce((a,p)=>a+pagadoMS(p),0);
+    return `<section class="card" style="display:flex;flex-direction:column;gap:6px"><b style="font-size:17px">${esc(d)}</b>
+      <div class="grid"><div><div class="note" style="margin:0">Trabajos aprobados</div><b>${A.length}</b></div><div><div class="note" style="margin:0">Se le debe (total)</div><b>${fmt(debe)}</b></div><div><div class="note" style="margin:0">Pagado</div><b class="pos">${fmt(pag)}</b></div><div><div class="note" style="margin:0">Saldo a pagarle</div><b class="${debe-pag>0?"neg":""}">${fmt(debe-pag)}</b></div></div>
+      ${A.filter(p=>calcMS(p).base-pagadoMS(p)>0).map(p=>`<div class="row between note" style="margin:0"><span>N° ${esc(String(p.numero))} · ${esc(p.trabajo)}</span><span>debe ${fmt(calcMS(p).base-pagadoMS(p))} <button class="btn sm" data-mspag="${esc(p.id)}">Pagar</button></span></div>`).join("")}</section>`}).join("")}`}
+function bindMS(V){
+  const g=id=>(S.presMS||[]).find(p=>p.id===id);
+  const n=V.querySelector("#ms_new");if(n)n.onclick=()=>openPresMS();
+  const c=V.querySelector("#ms_cfg");if(c)c.onclick=openCfgMS;
+  const m=V.querySelector("#ms_mes");if(m)m.onchange=()=>{S.filt.msmes=m.value;render()};
+  V.querySelectorAll("[data-msest]").forEach(b=>b.onclick=()=>{S.filt.msest=b.dataset.msest;render()});
+  V.querySelectorAll("[data-msed]").forEach(b=>b.onclick=()=>openPresMS(g(b.dataset.msed)));
+  V.querySelectorAll("[data-msprint]").forEach(b=>b.onclick=()=>imprimirHtml(hojaPresMS(g(b.dataset.msprint))));
+  V.querySelectorAll("[data-mswa]").forEach(b=>b.onclick=()=>{const p=g(b.dataset.mswa),k=calcMS(p);
+    abrirWa(`*Sinner Movimiento de Suelo*\nPresupuesto N° ${p.numero} · ${fdate(p.fecha)}\n\nCliente: ${p.cliente||""}\nTrabajo: ${p.trabajo||""}${p.lugar?"\nLugar: "+p.lugar:""}${p.detalle?"\n"+p.detalle:""}\n\n${k.iva?`Subtotal: ${fmt(k.neto)}\nIVA ${String(p.iva).replace(".",",")}%: ${fmt(k.iva)}\n`:""}*Total: ${fmt(k.total)}*${k.iva?"":" (sin IVA)"}\n\nQuedamos a disposición.`,"")});
+  V.querySelectorAll("[data-mscob]").forEach(b=>b.onclick=()=>{const p=g(b.dataset.mscob),k=calcMS(p);openMov(null,{tipo:"ingreso",obra:"_suelo",categoria:"Cobro de trabajo",monto:Math.max(0,k.total-cobradoMS(p)),detalle:`Cobro presupuesto N° ${p.numero}: ${p.trabajo} – ${p.cliente}`,presMS:p.id})});
+  V.querySelectorAll("[data-mspag]").forEach(b=>b.onclick=()=>{const p=g(b.dataset.mspag),k=calcMS(p);openMov(null,{tipo:"egreso",obra:"_suelo",categoria:"Pago a dueño de máquinas",monto:Math.max(0,k.base-pagadoMS(p)),detalle:`Pago a ${p.dueno} · presupuesto N° ${p.numero}: ${p.trabajo}`,presMS:p.id,dueno:p.dueno})});
+}
+function openPresMS(p){const e=!!p;const next=(S.presMS||[]).reduce((a,x)=>Math.max(a,+x.numero||0),0)+1;
+  p=p||{fecha:hoy(),numero:next,dueno:duenosMS()[0],comTipo:"pct",comision:S.cfg.msComision!=null?S.cfg.msComision:15,iva:0,estado:"espera"};
+  openSheet(`<form id="fms" style="display:flex;flex-direction:column;gap:12px">${sheetHead((e?"Presupuesto":"Nuevo presupuesto")+" N° "+p.numero+" · Movimiento de Suelo")}
+    <div class="two"><label class="f">Cliente<input id="ms_cli" value="${esc(p.cliente||"")}" required placeholder="Nombre o empresa"></label><label class="f">Fecha<input type="date" id="ms_f" value="${esc(p.fecha)}"></label></div>
+    <label class="f">Trabajo<input id="ms_tr" value="${esc(p.trabajo||"")}" required placeholder="Ej: nivelación de lote, excavación de pileta"></label>
+    <div class="two"><label class="f">Lugar<input id="ms_lu" value="${esc(p.lugar||"")}"></label><label class="f">Para<select id="ms_int"><option value="">Cliente externo</option><option value="cons" ${p.interno==="cons"?"selected":""}>Sinner Construcciones (obra propia)</option><option value="inmo" ${p.interno==="inmo"?"selected":""}>Sinner Desarrollo Inmobiliario</option></select></label></div>
+    <label class="f">Detalle para el cliente (opcional)<textarea id="ms_det" rows="2">${esc(p.detalle||"")}</textarea></label>
+    <div class="card" style="margin:0;display:flex;flex-direction:column;gap:8px">
+      <div class="two"><label class="f">Máquinas de<select id="ms_due">${duenosMS().map(d=>`<option ${d===p.dueno?"selected":""}>${esc(d)}</option>`).join("")}</select></label><label class="f">Precio que da el dueño $<input id="ms_base" inputmode="decimal" value="${p.precioDueno?esc(String(p.precioDueno)):""}" required></label>
+      <label class="f">Comisión Sinner<span class="row" style="gap:6px"><select id="ms_ct" style="width:80px"><option value="pct" ${p.comTipo!=="monto"?"selected":""}>%</option><option value="monto" ${p.comTipo==="monto"?"selected":""}>$</option></select><input id="ms_com" inputmode="decimal" value="${esc(String(p.comision??""))}" style="flex:1"></span></label>
+      <label class="f">IVA<select id="ms_iva">${IVAS.map(([v,l])=>`<option value="${v}" ${+p.iva===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
+      <div id="ms_tot" class="note" style="margin:0"></div></div>
+    <label class="f">Estado<select id="ms_est">${EST_MS.map(([k,l])=>`<option value="${k}" ${(p.estado||"espera")===k?"selected":""}>${l}</option>`).join("")}</select></label>
+    <div class="row between">${e?`<button type="button" class="btn danger" id="ms_del">Borrar</button>`:"<span></span>"}<button class="btn pri" type="submit">Guardar</button></div></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    const leer=()=>({precioDueno:num($("#ms_base").value)||0,comTipo:$("#ms_ct").value,comision:num($("#ms_com").value)||0,iva:+$("#ms_iva").value});
+    const tot=()=>{const k=calcMS(leer());$("#ms_tot").innerHTML=`Dueño ${fmt(k.base)} + comisión ${fmt(k.com)} = <b>${fmt(k.neto)}</b>${k.iva?` + IVA ${fmt(k.iva)}`:""} → <b style="font-size:16px">Precio al cliente ${fmt(k.total)}</b>`};
+    ["#ms_base","#ms_com"].forEach(x=>$(x).oninput=tot);["#ms_ct","#ms_iva"].forEach(x=>$(x).onchange=tot);tot();
+    if(e)$("#ms_del").onclick=async ev=>{const b=ev.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Tocá de nuevo para borrar";return}try{await db.collection("presupuestos").doc(p.id).delete();closeSheet();toast("Borrado")}catch(err){toast(errMsg(err))}};
+    $("#fms").onsubmit=async ev=>{ev.preventDefault();const L=leer();if(!L.precioDueno)return toast("Falta el precio del dueño");
+      const {id,_por,...prev}=p;const d={...prev,...L,unidad:"suelo",numero:p.numero,fecha:$("#ms_f").value,cliente:$("#ms_cli").value.trim(),trabajo:$("#ms_tr").value.trim(),lugar:$("#ms_lu").value.trim(),interno:$("#ms_int").value,detalle:$("#ms_det").value.trim(),dueno:$("#ms_due").value,estado:$("#ms_est").value,creado:p.creado||Date.now()};
+      const k=calcMS(d);d.total=k.total;d.margen=k.com;
+      try{await save("presupuestos",p.id,d);closeSheet();toast(d.estado==="aprobado"?"Guardado · aprobado ✓":"Presupuesto guardado")}catch(err){toast(errMsg(err))}};
+  })}
+function openCfgMS(){openSheet(`<form id="fmc" style="display:flex;flex-direction:column;gap:12px">${sheetHead("Ajustes · Movimiento de Suelo")}
+  <label class="f">Comisión de Sinner por defecto (%)<input id="mc_com" inputmode="decimal" value="${esc(String(S.cfg.msComision!=null?S.cfg.msComision:15))}"></label>
+  <label class="f">Dueños de máquinas (separados por coma)<input id="mc_due" value="${esc(duenosMS().join(", "))}"></label>
+  <button class="btn pri" type="submit">Guardar</button></form>`,sh=>{sh.querySelector("[data-close]").onclick=closeSheet;
+  $("#fmc").onsubmit=async ev=>{ev.preventDefault();const {id:_i,_por:_p,...resto}=S.cfg;try{await db.doc("config/general").set({...resto,msComision:num($("#mc_com").value)||0,duenosMaquinas:$("#mc_due").value.split(",").map(x=>x.trim()).filter(Boolean)});closeSheet();toast("Guardado")}catch(e){toast(errMsg(e))}}})}
+function hojaPresMS(p){const k=calcMS(p),logo=(document.querySelector("img.logo")||{}).src||"";const td="padding:8px 10px;border-bottom:1px solid #ddd";
+  return `<div style="font:13px/1.45 system-ui,sans-serif;color:#111;max-width:720px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:14px">${logo?`<img src="${logo}" style="height:50px">`:`<b>SINNER</b>`}<div style="text-align:right"><div style="font-size:18px;font-weight:700">Sinner Movimiento de Suelo</div><div>Presupuesto N° ${esc(String(p.numero))} · ${esc(fdate(p.fecha))}</div></div></div>
+  <p><b>Cliente:</b> ${esc(p.cliente||"")}${p.lugar?`<br><b>Lugar:</b> ${esc(p.lugar)}`:""}</p>
+  <table style="width:100%;border-collapse:collapse;margin:10px 0"><tr style="background:#f2f2f2"><th style="${td};text-align:left">Trabajo</th><th style="${td};text-align:right">Importe</th></tr>
+  <tr><td style="${td}">${esc(p.trabajo||"")}${p.detalle?`<div style="color:#555;margin-top:4px;white-space:pre-wrap">${esc(p.detalle)}</div>`:""}</td><td style="${td};text-align:right;white-space:nowrap">${fmt(k.neto)}</td></tr>
+  ${k.iva?`<tr><td style="${td};text-align:right">IVA ${esc(String(p.iva).replace(".",","))}%</td><td style="${td};text-align:right">${fmt(k.iva)}</td></tr>`:""}
+  <tr><td style="${td};text-align:right;font-weight:700">Total${k.iva?"":" (sin IVA)"}</td><td style="${td};text-align:right;font-weight:700;font-size:16px">${fmt(k.total)}</td></tr></table>
+  <p style="color:#555;font-size:12px">Presupuesto válido por 15 días. Sinner Construcciones · info@sinnerconstrucciones.com</p></div>`}
