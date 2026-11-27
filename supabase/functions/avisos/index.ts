@@ -84,13 +84,13 @@ Deno.serve(async (req) => {
     for (const uid of usuarios) {
       const mios = items.filter((a) => paraQuien(a).includes(uid) && a.fecha <= hoy);
       if (!mios.length) continue;
-      if (await yaEnviado(`dia|${uid}|${hoy}`)) continue;
+      if (await yaEnviado("dia|" + uid + "|" + hoy)) continue;
       const deHoy = mios.filter((a) => a.fecha === hoy).sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99"));
       const venc = mios.filter((a) => a.fecha < hoy);
-      const lista = deHoy.slice(0, 4).map((a) => (a.hora ? a.hora + " " : "") + a.texto).join(" · ");
+      const lista = deHoy.slice(0, 4).map((a) => (a.hora ? a.hora + " " : "") + a.texto).join(" - ");
       await mandar(uid, {
-        title: deHoy.length ? `📅 Hoy tenés ${deHoy.length} pendiente${deHoy.length === 1 ? "" : "s"}` : "📅 Pendientes vencidos",
-        body: (lista || "") + (deHoy.length > 4 ? " …" : "") + (venc.length ? `${lista ? "\n" : ""}⚠ ${venc.length} vencido${venc.length === 1 ? "" : "s"} sin hacer` : ""),
+        title: deHoy.length ? "Hoy tenés " + deHoy.length + " pendiente" + (deHoy.length === 1 ? "" : "s") : "Pendientes vencidos",
+        body: (lista || "") + (deHoy.length > 4 ? " ..." : "") + (venc.length ? (lista ? " | " : "") + venc.length + " vencido" + (venc.length === 1 ? "" : "s") + " sin hacer" : ""),
         tag: "dia-" + hoy, url: "./#agenda",
       });
     }
@@ -99,10 +99,10 @@ Deno.serve(async (req) => {
   for (const a of items.filter((x) => x.fecha === hoy && x.hora)) {
     const m = aMin(a.hora);
     if (m === null || ahora < m - MIN_ANTES || ahora >= m) continue;
-    if (await yaEnviado(`hora|${a.id}|${a.fecha}|${a.hora}`)) continue;
+    if (await yaEnviado("hora|" + a.id + "|" + a.fecha + "|" + a.hora)) continue;
     for (const uid of paraQuien(a)) {
       if (!usuarios.includes(uid)) continue;
-      await mandar(uid, { title: `⏰ A las ${a.hora}: ${a.texto}`, body: `Hoy ${fCorta(a.fecha)}${a.detalle ? " · " + a.detalle : ""}`, tag: "hora-" + a.id, url: "./#agenda" });
+      await mandar(uid, { title: "A las " + a.hora + ": " + a.texto, body: "Hoy " + fCorta(a.fecha) + (a.detalle ? " - " + a.detalle : ""), tag: "hora-" + a.id, url: "./#agenda" });
     }
   }
   // limpieza del registro de envíos viejos
