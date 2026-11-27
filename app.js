@@ -120,7 +120,7 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="27/11 11:32";
+const VERSION="27/11 12:09";
 const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda"];
 const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
 const isEnc=()=>S.rol==="encargado";
@@ -3002,3 +3002,14 @@ async function activarAvisos(){
   catch(e){toast("No se pudieron activar: "+(e.message||e))}}
 async function desactivarAvisos(){try{const r=await navigator.serviceWorker.getRegistration();const sub=r&&await r.pushManager.getSubscription();
   if(sub){await sb.from("push_subs").delete().eq("endpoint",sub.endpoint);await sub.unsubscribe()}S.avisos="off";render();toast("Avisos desactivados en este celular")}catch(e){toast(errMsg(e))}}
+
+
+/* ---------- aviso de versión nueva ---------- */
+async function revisarVersion(){try{const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});if(!r.ok)return;const j=await r.json();
+  if(j&&j.v&&j.v!==VERSION&&!document.getElementById("nuevaVer")){const d=document.createElement("div");d.id="nuevaVer";
+    d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:9999;background:#1d1d1b;color:#fff;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:92vw;font-size:14px";
+    d.innerHTML=`<span>🔄 Hay una versión nueva de la app</span><button class="btn sm pri" style="white-space:nowrap">Actualizar</button>`;
+    d.querySelector("button").onclick=()=>{d.querySelector("button").textContent="Actualizando…";location.replace(location.pathname+"?u="+Date.now()+location.hash)};
+    document.body.appendChild(d)}}catch(_){}}
+setTimeout(revisarVersion,4000);setInterval(revisarVersion,5*60e3);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")revisarVersion()});
