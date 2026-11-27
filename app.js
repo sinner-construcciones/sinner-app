@@ -120,9 +120,9 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="26/11 12:08";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion"];
-const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora"];
+const VERSION="27/11 10:59";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda"];
+const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
 document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>{location.hash=b.dataset.v}));
@@ -148,7 +148,7 @@ function render(){
   let top="";
   if(!db||S.err) top=`<div class="banner">${esc(S.err||"Conectando con la base de datos…")}</div>`;
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,proyeccion:vProyeccion,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -775,7 +775,7 @@ function vPortada(){
     ["empresa","Empresa","Gastos de la empresa (galpón, oficina, sueldos fijos) e inventario de herramientas."],
     ["buscar","Buscar","Encontrá cualquier movimiento por palabra, monto o fecha."]
   ]);
-  return (enc?"":importBanner())+`
+  return (enc?"":importBanner())+agendaAviso()+`
   <section class="hero">
     ${logo?`<img src="${logo}" alt="Sinner Construcciones" class="hero-logo">`:`<div class="hero-name">SINNER</div>`}
     <div class="mision"><span>Calidad</span><i></i><span>Eficiencia</span><i></i><span>Confort</span></div>
@@ -864,6 +864,7 @@ function bindView(v){
   if(v==="tarjetas")bindTarjetas(V);
   if(v==="encargados")bindEncargados(V);
   if(v==="proyeccion")bindProyeccion(V);
+  if(v==="agenda")bindAgenda(V);
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
   V.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>location.hash=b.dataset.go);
   V.querySelectorAll("[data-new]").forEach(b=>b.onclick=()=>({mov:()=>openMov(),jor:()=>openJor(),bit:()=>openBit(),obra:()=>openObra(),pres:()=>openPres()}[b.dataset.new])());
@@ -1779,18 +1780,19 @@ setInterval(async()=>{if(S.auth==="in"&&Date.now()-ultimaActividad>INACTIVIDAD_M
 async function copiaSeguridad(){
   if(!isAdmin())return;
   const out={app:"Sinner Construcciones",fecha:new Date().toISOString(),tablas:{}};
-  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error){if(from===0&&t==="cierres"){all=null;break}throw error}all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
+  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error){if(from===0&&(t==="cierres"||t==="agenda")){all=null;break}throw error}all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:"application/json"}));a.download=`sinner_copia_${hoy()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
     toast("Copia descargada. Guardala en un lugar privado.");
   }catch(e){toast("No se pudo armar la copia")}
 }
 
 /* ---------- conexión a Supabase ---------- */
-const TABLAS={movimientos:"movs",cierres:"cierres",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",config:null};
+const TABLAS={movimientos:"movs",cierres:"cierres",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",agenda:"agenda",config:null};
 function mapErr(e){const m=(e&&e.message||"")+"";return {code:(e&&e.code==="42501")||/row-level security|permission/i.test(m)?"invalid_argument":"unavailable",message:m}}
 async function cargarTabla(t){
   let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);
-    if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}  /* la tabla todavía no existe: la app sigue andando */
+    if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}
+    if(error&&t==="agenda"){S.agenda=[];S.sinAgenda=true;return}  /* la tabla todavía no existe: la app sigue andando */
     if(error)throw error;all=all.concat(data);if(data.length<1000)break}
   if(t==="config"){const pr=all.find(r=>r.id==="proyeccion");S.proy=pr?pr.data:null;const g=all.find(r=>r.id==="general");if(g){const d=g.data;(d.cajasExtra||[]).forEach(c=>{if(c&&!CAJAS.includes(c))CAJAS.push(c)});S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
@@ -1986,8 +1988,8 @@ function pintarHoy(){const el=document.getElementById("hoyBar");if(!el)return;
 /* ---------- menú lateral (☰) ---------- */
 function menuItems(){
   const enc=isEnc();
-  if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"]]]];
-  return [
+  if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["agenda","📅","Agenda"]]]];
+  return [["Agenda",[["agenda","📅","Agenda"]]],
     ["General",[["portada","🏠","Inicio"],["inicio","📊","Resumen"],["buscar","🔎","Buscar"]]],
     ["Dinero",[["caja","💵","Cajas y movimientos"],["usd","💲","Dólares y cambios"],["tarjetas","💳","Tarjetas de crédito"],["proyeccion","📈","Proyección de pagos"],["fede","👤","Caja y gastos de Federico"],["cierre","🔒","Apertura y cierre de cajas"],["sueldos","🧾","Sueldos"]]],
     ["Obras",[["obras","🏗️","Obras"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["encargados","🦺","Encargados"],["presupuestos","📐","Precios y presupuestos"]]],
@@ -2889,3 +2891,79 @@ function openRecordatorios(){const mes=S.filt.bmes&&S.filt.bmes!=="todo"?S.filt.
       sh.querySelector("[data-close]").onclick=closeSheet;
       sh.querySelectorAll("[data-rwa]").forEach(b=>b.onclick=()=>{const x=L[+b.dataset.rwa];abrirWa(textoRecordatorio(x),telDe(x.u.id));b.textContent="✓ Enviado"});
       sh.querySelectorAll("[data-rcp]").forEach(b=>b.onclick=()=>copiarTxt(textoRecordatorio(L[+b.dataset.rcp])))})})}
+
+
+/* ---------- agenda de pendientes ---------- */
+const REP_AG=[["no","No se repite"],["dia","Todos los días"],["semana","Todas las semanas"],["mes","Todos los meses"]];
+const miNombre=()=>(S.perfil&&S.perfil.nombre)||"";
+function agVisibles(){const L=S.agenda||[];return isEnc()?L.filter(a=>a._por===S.uid||a.asignado===S.uid):L}
+function esMioAg(a){return a.asignado===S.uid||(!a.asignado&&a._por===S.uid)}
+function puedeEditarAg(a){return !isEnc()||a._por===S.uid}
+function agendaAviso(){const L=agVisibles().filter(a=>!a.hecho&&(isEnc()||esMioAg(a)||!a.asignado));const h=hoy();
+  const venc=L.filter(a=>a.fecha<h).length,hoyN=L.filter(a=>a.fecha===h).length;if(!venc&&!hoyN)return "";
+  return `<button class="banner" data-go="agenda" style="width:100%;text-align:left;cursor:pointer">📅 ${hoyN?`Tenés <b>${hoyN}</b> pendiente${hoyN===1?"":"s"} para hoy`:""}${hoyN&&venc?" y ":""}${venc?`<b style="color:var(--bad)">${venc} vencido${venc===1?"":"s"}</b>`:""}. Ver agenda ›</button>`}
+function vAgenda(){
+  if(S.sinAgenda)return `<h2>Agenda</h2><div class="card">Falta activar la agenda en la base de datos: corré el <b>SQL 11</b> en Supabase (te lo pasó Claude) y volvé a abrir la app.</div>`;
+  if(!isEnc()&&!S.perfiles)cargarPerfiles();
+  const f=S.filt.ag||"todos",ob=S.filt.agob||"",h=hoy(),man=addDias(h,1);
+  let L=agVisibles();
+  if(f==="mios")L=L.filter(esMioAg);
+  if(ob)L=L.filter(a=>a.obra===ob);
+  const hechos=L.filter(a=>a.hecho).sort((a,b)=>(b.hechoEn||0)-(a.hechoEn||0));
+  const P=L.filter(a=>!a.hecho).sort((a,b)=>(a.fecha+(a.hora||"99")).localeCompare(b.fecha+(b.hora||"99")));
+  const grupos=[["Vencidos","var(--bad)",P.filter(a=>a.fecha<h)],["Hoy · "+dlabel(h),"",P.filter(a=>a.fecha===h)],["Mañana · "+dlabel(man),"var(--muted)",P.filter(a=>a.fecha===man)],["Próximos","var(--muted)",P.filter(a=>a.fecha>man)]];
+  const quien=a=>a.asignado?(a.asignadoNombre||"—"):"Administración";
+  const item=a=>`<div class="item" style="cursor:default;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;${a.hecho?"opacity:.6":""}">
+    <button class="btn sm" data-agok="${esc(a.id)}" aria-label="${a.hecho?"Desmarcar":"Marcar como hecho"}" style="width:30px;height:30px;padding:0;border-radius:50%;${a.hecho?"background:var(--good);color:#fff":a.fecha<h?"border-color:var(--bad)":""}">${a.hecho?"✓":""}</button>
+    <div><div class="row between" style="gap:6px;align-items:flex-start"><span class="t" style="${a.hecho?"text-decoration:line-through":""}">${esc(a.texto)}</span>${puedeEditarAg(a)?`<button class="btn sm" data-aged="${esc(a.id)}">Editar</button>`:""}</div>
+    <div class="s">${a.fecha!==h&&a.fecha!==man?esc(dlabel(a.fecha))+" · ":""}${a.hora?esc(a.hora)+" · ":""}${a.obra?esc(obraNombre(a.obra))+" · ":""}${esc(quien(a))}${a.rep&&a.rep!=="no"?" · 🔁 "+esc(REP_AG.find(r=>r[0]===a.rep)[1].toLowerCase()):""}</div>
+    ${a.detalle?`<div class="note" style="margin:2px 0 0">${esc(a.detalle)}</div>`:""}
+    ${(a.notas||[]).map(n=>`<div class="note" style="margin:4px 0 0;padding:4px 8px;background:var(--soft);border-radius:8px">💬 <b>${esc(n.nombre||"")}</b>: ${esc(n.txt)} <span style="opacity:.7">· ${esc(fdate(new Date(n.ts).toISOString().slice(0,10)))}</span></div>`).join("")}
+    ${a.hecho?`<div class="note" style="margin:2px 0 0;color:var(--good)">Hecho${a.hechoPor?" por "+esc(a.hechoPor):""}${a.hechoEn?" el "+esc(fdate(new Date(a.hechoEn).toISOString().slice(0,10))):""}</div>`
+      :`<div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap"><button class="btn sm" data-agnota="${esc(a.id)}">💬 Nota</button>${puedeEditarAg(a)?`<button class="btn sm" data-agpos="${esc(a.id)}|1">Mañana</button><button class="btn sm" data-agpos="${esc(a.id)}|7">+1 semana</button>`:""}${!isEnc()&&a.asignado?`<button class="btn sm" data-agwa="${esc(a.id)}">📲</button>`:""}</div>`}</div></div>`;
+  const obrasF=sortObras(S.obras).filter(o=>!o.id.startsWith("_")&&(isEnc()?agVisibles().some(a=>a.obra===o.id):o.estado!=="Terminada"));
+  return `<div class="row between"><h2>Agenda</h2><button class="btn pri sm" id="ag_new">+ Pendiente</button></div>
+  <div class="chips">${[["todos","Todos"],["mios","Míos"],["hechos","Hechos"]].map(([k,l])=>`<button class="chip" aria-pressed="${f===k}" data-agf="${k}">${l}</button>`).join("")}
+    <select id="ag_ob" style="width:auto"><option value="">Todas las obras</option>${obrasF.map(o=>`<option value="${esc(o.id)}" ${o.id===ob?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></div>
+  ${f==="hechos"?`<div class="list">${hechos.slice(0,100).map(item).join("")||`<div class="empty">Todavía no hay pendientes hechos.</div>`}</div>`
+   :grupos.filter(g=>g[2].length).map(([t,c,G])=>`<h3 style="margin:10px 0 4px;${c?"color:"+c:""}">${esc(t)} (${G.length})</h3><div class="list">${G.map(item).join("")}</div>`).join("")||`<div class="card empty">No hay pendientes. Tocá “+ Pendiente” para agregar uno.</div>`}`}
+async function guardarAg(a){const {id,_por,...d}=a;await db.collection("agenda").doc(id).set(d)}
+function bindAgenda(V){
+  const n=V.querySelector("#ag_new");if(n)n.onclick=()=>openAg();
+  V.querySelectorAll("[data-agf]").forEach(b=>b.onclick=()=>{S.filt.ag=b.dataset.agf;render()});
+  const ob=V.querySelector("#ag_ob");if(ob)ob.onchange=()=>{S.filt.agob=ob.value;render()};
+  const get=id=>(S.agenda||[]).find(a=>a.id===id);
+  V.querySelectorAll("[data-aged]").forEach(b=>b.onclick=()=>openAg(get(b.dataset.aged)));
+  V.querySelectorAll("[data-agok]").forEach(b=>b.onclick=async()=>{const a=get(b.dataset.agok);if(!a)return;
+    const u={...a,hecho:!a.hecho,hechoPor:!a.hecho?miNombre():"",hechoEn:!a.hecho?Date.now():0};
+    try{await guardarAg(u);
+      if(u.hecho&&a.rep&&a.rep!=="no"&&!a.siguiente&&puedeEditarAg(a)){const nf=a.rep==="dia"?addDias(a.fecha,1):a.rep==="semana"?addDias(a.fecha,7):mismoDia(sigMes(a.fecha.slice(0,7)),+a.fecha.slice(8));
+        const nid="ag"+Date.now();const {id:_x,_por:_y,notas:_n,hecho:_h,hechoPor:_hp,hechoEn:_he,siguiente:_s,...base}=a;
+        await db.collection("agenda").doc(nid).set({...base,fecha:nf,hecho:false,creado:Date.now()});await guardarAg({...u,siguiente:nid});toast("Hecho ✓ · próximo: "+dlabel(nf))}
+      else toast(u.hecho?"Hecho ✓":"Vuelve a pendientes")}catch(e){toast(errMsg(e))}});
+  V.querySelectorAll("[data-agpos]").forEach(b=>b.onclick=async()=>{const [id,d]=b.dataset.agpos.split("|");const a=get(id);if(!a)return;
+    const base=a.fecha<hoy()?hoy():a.fecha;try{await guardarAg({...a,fecha:d==="1"&&a.fecha<hoy()?addDias(hoy(),1):addDias(base,+d)});toast("Pospuesto")}catch(e){toast(errMsg(e))}});
+  V.querySelectorAll("[data-agnota]").forEach(b=>b.onclick=async()=>{const a=get(b.dataset.agnota);const t=prompt("Nota para “"+a.texto+"”:");if(!t||!t.trim())return;
+    try{await guardarAg({...a,notas:[...(a.notas||[]),{por:S.uid,nombre:miNombre(),txt:t.trim(),ts:Date.now()}]});toast("Nota agregada")}catch(e){toast(errMsg(e))}});
+  V.querySelectorAll("[data-agwa]").forEach(b=>b.onclick=()=>{const a=get(b.dataset.agwa);const nom=(a.asignadoNombre||"").split(/\s+/)[0];
+    abrirWa(`Hola ${nom}! 👋 Te dejé un pendiente en la agenda de la app:\n\n📌 ${a.texto}\n📅 ${dlabel(a.fecha)}${a.hora?" · "+a.hora:""}${a.obra?"\n🏗️ "+obraNombre(a.obra):""}${a.detalle?"\n"+a.detalle:""}\n\nCuando esté, tildalo en la app (Agenda): ${urlApp()}`,telDe(a.asignado))});
+}
+function openAg(a){const e=!!a;a=a||{fecha:hoy(),rep:"no",asignado:isEnc()?S.uid:""};
+  const users=isEnc()?[]:(S.perfiles||[]).filter(u=>u.rol==="admin"||u.rol==="encargado");
+  const obras=isEnc()?obrasCargo().filter(o=>!o.id.startsWith("_")):sortObras(S.obras).filter(o=>!o.id.startsWith("_")&&(o.estado!=="Terminada"||o.id===a.obra));
+  openSheet(`<form id="fag" style="display:flex;flex-direction:column;gap:12px">${sheetHead(e?"Editar pendiente":"Nuevo pendiente")}
+    <label class="f">Qué hay que hacer<input id="ag_t" value="${esc(a.texto||"")}" required placeholder="Ej: pedir factura a Sarmiento"></label>
+    <div class="two"><label class="f">Día<input type="date" id="ag_f" value="${esc(a.fecha)}" required></label><label class="f">Hora (opcional)<input type="time" id="ag_h" value="${esc(a.hora||"")}"></label>
+    ${isEnc()?"":`<label class="f">Para quién<select id="ag_a"><option value="">Administración (general)</option>${users.map(u=>`<option value="${esc(u.id)}" ${u.id===a.asignado?"selected":""}>${esc(u.nombre||verUsuario(u))}${u.rol==="encargado"?" (encargado)":""}</option>`).join("")}</select></label>`}
+    <label class="f">Obra (opcional)<select id="ag_o"><option value="">—</option>${obras.map(o=>`<option value="${esc(o.id)}" ${o.id===a.obra?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></label>
+    <label class="f">Repetir<select id="ag_r">${REP_AG.map(([k,l])=>`<option value="${k}" ${a.rep===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
+    <label class="f">Detalle (opcional)<textarea id="ag_d" rows="2">${esc(a.detalle||"")}</textarea></label>
+    <div class="row between">${e?`<button type="button" class="btn danger" id="ag_del">Borrar</button>`:"<span></span>"}<button class="btn pri" type="submit">Guardar</button></div></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    if(e)$("#ag_del").onclick=async ev=>{const b=ev.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Tocá de nuevo para borrar";return}try{await db.collection("agenda").doc(a.id).delete();closeSheet();toast("Borrado")}catch(err){toast(errMsg(err))}};
+    $("#fag").onsubmit=async ev=>{ev.preventDefault();const asig=isEnc()?S.uid:$("#ag_a").value;const u=(S.perfiles||[]).find(x=>x.id===asig);
+      const d={...a,id:a.id||("ag"+Date.now()),texto:$("#ag_t").value.trim(),fecha:$("#ag_f").value,hora:$("#ag_h").value,asignado:asig,asignadoNombre:isEnc()?miNombre():(u?(u.nombre||verUsuario(u)):""),obra:$("#ag_o").value,rep:$("#ag_r").value,detalle:$("#ag_d").value.trim(),creadoPorNombre:a.creadoPorNombre||miNombre(),creado:a.creado||Date.now()};
+      try{await guardarAg(d);closeSheet();toast("Guardado");
+        if(!e&&!isEnc()&&asig&&asig!==S.uid&&confirm("¿Le mandás el pendiente por WhatsApp?")){const nom=(d.asignadoNombre||"").split(/\s+/)[0];abrirWa(`Hola ${nom}! 👋 Te dejé un pendiente en la agenda de la app:\n\n📌 ${d.texto}\n📅 ${dlabel(d.fecha)}${d.hora?" · "+d.hora:""}${d.obra?"\n🏗️ "+obraNombre(d.obra):""}${d.detalle?"\n"+d.detalle:""}\n\nCuando esté, tildalo en la app (Agenda): ${urlApp()}`,telDe(asig))}}
+      catch(err){toast(errMsg(err))}};
+  })}
