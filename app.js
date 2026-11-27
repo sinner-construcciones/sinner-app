@@ -129,9 +129,9 @@ function saldoObra(o,r){const ad=adicDe(o);if(!o.contratoUsd&&!ad.usd&&!ad.ars)r
 const aUsd=n=>{const b=num(S.cfg.cotizacion);return b?"≈ "+fmtU(Math.round(n/b)):""};
 
 /* ---------- navegación ---------- */
-const VERSION="27/11 15:18";
-const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda","sec-inicio","sec-dinero","sec-obras","sec-personal","sec-empresa","sec-admin","ms","msd","general","pronto"];
-const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda"];
+const VERSION="27/11 16:13";
+const VIEWS=["tarjetas","usd","fede","portada","inicio","cierre","empresa","sueldos","legajo","clientes","cliente","proveedores","proveedor","caja","jornales","bitacora","obras","presupuestos","buscar","encargados","proyeccion","agenda","sec-inicio","sec-dinero","sec-obras","sec-personal","sec-empresa","sec-admin","ms","msd","general","pronto","stock"];
+const VIEWS_ENC=["portada","inicio","caja","cierre","jornales","bitacora","agenda","stock"];
 const isEnc=()=>S.rol==="encargado";
 function cur(){const h=location.hash.slice(1);const ok=isEnc()?VIEWS_ENC:VIEWS;return ok.includes(h)?h:"portada"}
 document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>{location.hash=b.dataset.v}));
@@ -160,7 +160,7 @@ function render(){
   else if(S.stale) top=`<div class="banner">Todavía no se pudo traer la información. Revisá la conexión; lo que ves puede estar desactualizado.</div>`;
   const sc=!enc&&!v.startsWith("sec-")?seccionDe(v):null;
   if(sc)top+=`<button class="btn sm" data-secback="${sc}" style="margin-bottom:6px;width:auto;align-self:flex-start;justify-self:start">‹ ${esc(SECC[sc][1])}</button>`;
-  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,"sec-inicio":()=>vSeccion("inicio"),"sec-dinero":()=>vSeccion("dinero"),"sec-obras":()=>vSeccion("obras"),"sec-personal":()=>vSeccion("personal"),"sec-empresa":()=>vSeccion("empresa"),"sec-admin":()=>vSeccion("admin"),ms:vMS,msd:vMSD,general:vGeneral,pronto:vPronto,encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
+  el.innerHTML = top + ({tarjetas:vTarjetas,usd:vUsd,fede:vFede,cierre:vCierre,portada:vPortada,inicio:enc?vInicioEnc:vInicio,caja:vCaja,jornales:vJornales,bitacora:vBitacora,obras:vObras,presupuestos:vPresupuestos,buscar:vBuscar,"sec-inicio":()=>vSeccion("inicio"),"sec-dinero":()=>vSeccion("dinero"),"sec-obras":()=>vSeccion("obras"),"sec-personal":()=>vSeccion("personal"),"sec-empresa":()=>vSeccion("empresa"),"sec-admin":()=>vSeccion("admin"),ms:vMS,msd:vMSD,general:vGeneral,pronto:vPronto,stock:vStock,encargados:vEncargados,proyeccion:vProyeccion,agenda:vAgenda,empresa:vEmpresa,sueldos:vSueldos,legajo:vLegajo,clientes:vClientes,cliente:vCliente,proveedores:vProveedores,proveedor:vProveedor}[v])();
   bindView(v);
   $("main").scrollTop = render.lastV===v? $("main").scrollTop : 0; render.lastV=v;
 }
@@ -257,7 +257,7 @@ function vJornales(){
     html+=`<button class="item" data-edit-jor="${esc(j.id)}"><span class="t">${esc(obraNombre(j.obra))}</span><span class="s">${esc(j.nota||"")}</span><span class="m">${+j.cantidad} jornal${+j.cantidad===1?"":"es"}</span></button>`}
   const tot=L.reduce((a,j)=>a+(+j.cantidad||0),0);
   return `<h2>Jornales · ${esc(mlabel(mes))}</h2>
-  ${isEnc()?`<button class="btn pri" id="enc_pdf" style="width:100%">📄 Subir planilla de sueldos (PDF)</button>`:""}
+  ${isEnc()?`<div class="row" style="gap:8px"><button class="btn pri" id="enc_gasto" style="flex:1">+ Gasto</button><button class="btn" id="enc_pdf" style="flex:1">📄 Subir planilla de sueldos (PDF)</button></div>`:""}
   <p class="note" style="margin:0">Se carga cantidad de jornales por obra y por día.${isEnc()?"":` Costo por jornal: ${fmt(S.cfg.costoJornal)}. Los sueldos fijos van aparte, como movimiento de caja.`}</p>
   <section class="card"><h3 style="margin-bottom:8px">Total del mes por obra</h3>
   ${Object.keys(por).length?`<table><tbody>${Object.entries(por).map(([o,c])=>`<tr><td>${esc(obraNombre(o))}</td><td>${c}</td>${isEnc()?"":`<td>${fmt(c*S.cfg.costoJornal)}</td>`}</tr>`).join("")}</tbody>
@@ -325,6 +325,8 @@ function vObras(){
   const nH=S.obras.filter(o=>o.estado==="Terminada").length;
   return `<div class="row between"><h2>Obras</h2>${dl?`<button class="btn sm" id="expRes">Descargar resultados</button>`:""}</div>
   <div class="seg" style="max-width:420px"><button type="button" data-oh="act" aria-pressed="${!hist}">En curso (${L.length})</button><button type="button" data-oh="hist" aria-pressed="${hist}">Histórico (${nH})</button></div>
+  <input id="obraQ" list="obrasDL" placeholder="🔎 Buscar obra… (escribí y elegí)" autocomplete="off" style="max-width:420px">
+  <datalist id="obrasDL">${sortObras(S.obras.filter(o=>!o.id.startsWith("_"))).map(o=>`<option value="${esc(o.nombre)}">${o.estado==="Terminada"?"Terminada":esc(o.cliente||"")}</option>`).join("")}</datalist>
   ${hist?vHistorico():`<p class="note" style="margin:0">Tocá una obra para abrir su legajo: números, archivos (presupuestos, planos, contrato, fotos) y bitácora. Resultado = cobrado − gastos de la obra − jornales × costo. Las obras se cotizan en dólar blue y cada cobro se pasa a pesos con la cotización del día.</p>
   ${L.map(o=>{const r=resObra(o.id);const pct=o.contratoUsd&&r.cobrosU?Math.min(100,Math.round(r.cobrosU/o.contratoUsd*100)):null;
    return `<button class="card obra-card" data-edit-obra="${esc(o.id)}">
@@ -879,6 +881,7 @@ function bindView(v){
   if(v==="agenda")bindAgenda(V);
   if(v.startsWith("sec-"))bindSeccion(V);
   if(v==="ms"||v==="msd")bindMS(V);
+  if(v==="stock")bindStock(V);
   if(v==="general"){const g=V.querySelector("#gen_mes");if(g)g.onchange=()=>{S.filt.genmes=g.value;render()}}
   const bk=V.querySelector("[data-secback]");if(bk)bk.onclick=()=>location.hash="sec-"+bk.dataset.secback;
   const cq=V.querySelector("#cajaQ");if(cq){cq.oninput=()=>{S.filt.cq=cq.value;const pos=cq.selectionStart;render();const n=$("#cajaQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
@@ -910,9 +913,12 @@ function bindView(v){
   V.querySelectorAll("[data-edit-mov]").forEach(b=>b.onclick=()=>openMov(S.movs.find(x=>x.id===b.dataset.editMov)));
   V.querySelectorAll("[data-edit-jor]").forEach(b=>b.onclick=()=>openJor(S.jorn.find(x=>x.id===b.dataset.editJor)));
   const ep=V.querySelector("#enc_pdf");if(ep)ep.onclick=()=>subirPlanillaPDF(true);
+  const eg=V.querySelector("#enc_gasto");if(eg)eg.onclick=()=>openMov(null,{pagoDe:true});
   V.querySelectorAll("[data-edit-bit]").forEach(b=>b.onclick=()=>openBit(S.bit.find(x=>x.id===b.dataset.editBit)));
   V.querySelectorAll("[data-bit-new]").forEach(b=>b.onclick=()=>{const ex=S.bit.find(x=>x.obra===b.dataset.bitNew&&x.fecha===hoy());openBit(ex||{obra:b.dataset.bitNew})});
   V.querySelectorAll("[data-edit-obra]").forEach(b=>b.onclick=()=>{S.legObra=b.dataset.editObra;location.hash="legajo"});
+  const oq=V.querySelector("#obraQ");if(oq){const ir=()=>{const t=nrmTxt(oq.value);if(!t)return;const o=S.obras.find(x=>nrmTxt(x.nombre)===t)||(S.obras.filter(x=>nrmTxt(x.nombre).includes(t)).length===1?S.obras.find(x=>nrmTxt(x.nombre).includes(t)):null);if(o){S.legObra=o.id;location.hash="legajo"}};
+    oq.onchange=ir;oq.onkeydown=e=>{if(e.key==="Enter")ir()}}
   V.querySelectorAll("[data-caja]").forEach(b=>b.onclick=()=>{S.filt.caja=b.dataset.caja;render()});
   V.querySelectorAll("[data-encv]").forEach(b=>b.onclick=()=>{S.filt.encv=b.dataset.encv;render()});
   V.querySelectorAll("[data-oh]").forEach(b=>b.onclick=()=>{S.filt.oh=b.dataset.oh;render()});
@@ -982,6 +988,7 @@ function openMov(m,preset){
     <div class="seg" id="segMon" style="max-width:280px">${[["ARS","En pesos"],["USD","En dólares"]].map(([v,l])=>`<button type="button" data-mon="${v}" aria-pressed="${st.mon===v}">${l}</button>`).join("")}</div>
     <div class="two"><label class="f">Fecha<input type="date" id="m_fecha" value="${esc(m.fecha)}" required></label>
       <label class="f"><span id="lblCaja">Caja</span><select id="m_caja" ${isEnc()?"disabled":""}>${(CAJAS.includes(m.caja)?CAJAS:[m.caja,...CAJAS]).map(c=>`<option ${m.caja===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label></div>
+    ${isEnc()&&!e&&m.pagoDe?`<label class="f">¿Con qué plata lo pagaste?<select id="m_pagoDe"><option value="">De mi caja (${esc(S.perfil.caja)})</option><option value="Numa">Me la dio Numa</option><option value="Federico">Me la dio Federico</option></select></label>`:""}
     <div class="two" id="wCuenta"><label class="f"><span id="lblCuenta">Cuenta</span><select id="m_cuenta"></select></label><label class="f" id="wCuentaA"><span id="lblCuentaA">A la cuenta</span><select id="m_cuentaA"></select></label>
       <label class="f" id="wComi">Comisión que cobraron<input id="m_comi" inputmode="decimal" placeholder="Ej: 60000 o 3%" value="${esc(m.comision||"")}"></label></div>
     <label class="f" id="wDest">A la caja<select id="m_dest">${CAJAS.map(c=>`<option ${m.cajaDestino===c?"selected":""}>${c}</option>`).join("")}</select></label>
@@ -1001,6 +1008,7 @@ function openMov(m,preset){
     </div>
     <label class="f" id="wVeh">Vehículo<select id="m_veh"><option value="">—</option>${vehs().map(v=>`<option value="${esc(v.id)}" ${m.vehiculo===v.id?"selected":""}>${esc(v.nombre)}${v.patente?" · "+esc(v.patente):""}</option>`).join("")}</select></label>
     ${S.prov.length?`<label class="f" id="wProv">Proveedor (opcional)<select id="m_prov"><option value="">—</option>${[...S.prov].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(p=>`<option value="${esc(p.id)}" ${m.proveedorId===p.id?"selected":""}>${esc(p.nombre)}${p.rubro?" · "+esc(p.rubro):""}</option>`).join("")}</select></label>`:""}
+    ${isEnc()?"":`<div id="wStock" class="card" style="margin:0;display:none;flex-direction:column;gap:6px"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="m_stk"> 📦 Sumar al stock de la obra</label><div id="m_stkRows" style="display:none;flex-direction:column;gap:6px"></div><button type="button" class="btn sm" id="m_stkAdd" style="display:none;align-self:flex-start">+ Otro material</button></div>`}
     <label class="f">Detalle<input id="m_det" value="${esc(m.detalle||"")}" placeholder="Ej: 20 bolsas de cemento – Corralón"></label>
     ${!e?`<label class="row" id="wRem" style="font-size:14px;font-weight:600;gap:6px"><input type="checkbox" id="m_rem" ${m.conRemito?"checked":""}> 📄 Generar remito de pago al guardar</label>`:""}
     ${e&&m.tipo==="egreso"?`<button type="button" class="btn" id="m_remb">📄 ${m.remitoNro?"Ver remito N° "+String(m.remitoNro).padStart(4,"0"):"Emitir remito de pago"}</button>`:""}
@@ -1059,7 +1067,7 @@ function openMov(m,preset){
       $("#m_cotInfo").innerHTML=st.enUsd&&u&&c?`Entran <b>${fmt(u*c)}</b> en pesos.`:"Poné los dólares y a cuánto te tomaron cada uno, o directamente los pesos que te dieron en “Monto”."};
     const calc=()=>{if(st.enUsd){const v=num($("#m_usd").value)*num($("#m_cot").value);$("#m_monto").value=v?Math.round(v*100)/100:""}info()};
     const desdePesos=()=>{if(st.enUsd){const u=num($("#m_usd").value),p=num($("#m_monto").value);if(u&&p)$("#m_cot").value=Math.round(p/u*100)/100}info()};
-    $("#m_usd").oninput=calc;$("#m_cot").oninput=calc;$("#m_monto").addEventListener("input",desdePesos);upd();info();
+    $("#m_usd").oninput=calc;$("#m_cot").oninput=calc;$("#m_monto").addEventListener("input",desdePesos);upd();info();stockFormInit();
     $("#fm").onsubmit=async ev=>{ev.preventDefault();
       const usdMode=!["cambio","mover"].includes(st.tipo)&&st.mon==="USD"&&!isEnc(),ux=num($("#m_usdx").value);
       let monto=num($("#m_monto").value);
@@ -1091,7 +1099,11 @@ function openMov(m,preset){
       if($("#wUsdRef").style.display!=="none")d.usdRef=num($("#m_usdref").value)||0;
       for(const k of ["empleadoId","liquidacion","usdRef","presMS","dueno"])if(m[k]!=null&&d[k]==null)d[k]=m[k];
       const rem=!e&&st.tipo==="egreso"&&$("#m_rem")&&$("#m_rem").checked;
+      const pd=$("#m_pagoDe");if(pd&&pd.value){d.caja=pd.value;d.cargadoPor=(S.perfil&&S.perfil.nombre)||"encargado";d.detalle=(d.detalle?d.detalle+" ":"")+"(cargado por "+d.cargadoPor+")"}
+      const stkRows=!isEnc()&&$("#m_stk")&&$("#m_stk").checked&&d.tipo==="egreso"?[...document.querySelectorAll("#m_stkRows [data-srow]")].map(r=>({material:r.querySelector("[data-k=mat]").value.trim(),cant:num(r.querySelector("[data-k=cant]").value),unidad:r.querySelector("[data-k=uni]").value})).filter(x=>x.material&&x.cant):[];
       const nid=await save("movimientos",m.id,d);
+      if(nid&&stkRows.length){const mid=typeof nid==="string"?nid:m.id;const ob=d.obra&&!d.obra.startsWith("_")?d.obra:"_empresa";
+        try{for(const [i,x] of stkRows.entries())await db.collection("stock").doc("st"+Date.now()+"_"+i).set({obra:ob,material:x.material,unidad:x.unidad,cant:x.cant,tipo:"compra",fecha:d.fecha,movId:mid,nota:d.detalle||"",porNombre:(S.perfil&&S.perfil.nombre)||"",creado:Date.now()});toast("Sumado al stock")}catch(e){toast("El gasto se guardó, pero no se pudo sumar al stock: "+errMsg(e))}}
       if(nid&&d.tipo==="mover"){const cid=m.comisionMovId||"";const ref=db.collection("movimientos").doc(cid||undefined);
         if(d.comision>0){await ref.set({fecha:d.fecha,tipo:"egreso",caja:d.caja,cuenta:d.cuentaDe,monto:d.comision,obra:"_empresa",categoria:"Comisiones bancarias",detalle:`Comisión por pasar ${fmt(d.monto)} de ${d.cuentaDe} a ${d.cuentaA}`,creado:Date.now()});
           const mid=typeof nid==="string"?nid:m.id;if(!cid)await db.collection("movimientos").doc(mid).set({...d,comisionMovId:ref.id})}
@@ -1641,6 +1653,7 @@ function vLegajo(){
       <div class="card stat"><div class="lbl">Resultado</div><div class="num ${r.res<0?"neg":""}">${fmt(r.res)}</div><div class="note">${aUsd(r.res)}</div></div></div>
   </section>
   ${isAdmin()&&(o.adicionales||[]).length?adicHtml(o):""}
+  ${stockResumenHtml(o.id)}
   <section class="card" style="border-color:var(--good)"><div class="row between"><h3>Ingresos (${ING.length})</h3><b class="pos">${fmt(r.cobros)}${r.cobrosU?`<br><span class="note">${fmtU(Math.round(r.cobrosU))}</span>`:""}</b></div>
     ${ING.length?`<div class="list" style="margin-top:6px">${ING.map(linea).join("")}</div>`:`<div class="empty">Todavía no hay cobros cargados para esta obra.</div>`}</section>
   <section class="card" style="border-color:var(--bad)"><div class="row between"><h3>Egresos por rubro</h3><b class="neg">${fmt(egTot)}</b></div>
@@ -1797,19 +1810,20 @@ setInterval(async()=>{if(S.auth==="in"&&Date.now()-ultimaActividad>INACTIVIDAD_M
 async function copiaSeguridad(){
   if(!isAdmin())return;
   const out={app:"Sinner Construcciones",fecha:new Date().toISOString(),tablas:{}};
-  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error){if(from===0&&(t==="cierres"||t==="agenda")){all=null;break}throw error}all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
+  try{for(const t of Object.keys(TABLAS)){let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por,actualizado").range(from,from+999);if(error){if(from===0&&(t==="cierres"||t==="agenda"||t==="stock")){all=null;break}throw error}all=all.concat(data);if(data.length<1000)break}out.tablas[t]=all}
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:"application/json"}));a.download=`sinner_copia_${hoy()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
     toast("Copia descargada. Guardala en un lugar privado.");
   }catch(e){toast("No se pudo armar la copia")}
 }
 
 /* ---------- conexión a Supabase ---------- */
-const TABLAS={movimientos:"movs",cierres:"cierres",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",agenda:"agenda",config:null};
+const TABLAS={movimientos:"movs",cierres:"cierres",obras:"obras",jornales:"jorn",bitacora:"bit",presupuestos:"pres",inventario:"inv",empleados:"emp",sueldos:"liqs",clientes:"cli",proveedores:"prov",agenda:"agenda",stock:"stock",config:null};
 function mapErr(e){const m=(e&&e.message||"")+"";return {code:(e&&e.code==="42501")||/row-level security|permission/i.test(m)?"invalid_argument":"unavailable",message:m}}
 async function cargarTabla(t){
   let all=[];for(let from=0;;from+=1000){const {data,error}=await sb.from(t).select("id,data,creado_por").range(from,from+999);
     if(error&&t==="cierres"){S.cierres=[];S.sinCierres=true;return}
-    if(error&&t==="agenda"){S.agenda=[];S.sinAgenda=true;return}  /* la tabla todavía no existe: la app sigue andando */
+    if(error&&t==="agenda"){S.agenda=[];S.sinAgenda=true;return}
+    if(error&&t==="stock"){S.stock=[];S.sinStock=true;return}  /* la tabla todavía no existe: la app sigue andando */
     if(error)throw error;all=all.concat(data);if(data.length<1000)break}
   if(t==="config"){const pr=all.find(r=>r.id==="proyeccion");S.proy=pr?pr.data:null;const g=all.find(r=>r.id==="general");if(g){const d=g.data;(d.cajasExtra||[]).forEach(c=>{if(c&&!CAJAS.includes(c))CAJAS.push(c)});S.cfg={...DEF_CFG,...d,precios:{...DEF_CFG.precios,...(d.precios||{})},rend:{...DEF_CFG.rend,...(d.rend||{})}};if(S.blue)S.cfg.cotizacion=S.blue.venta}
     const im=all.find(r=>r.id==="importacion");S.imp=im?im.data:null;
@@ -2006,7 +2020,7 @@ function pintarHoy(){const el=document.getElementById("hoyBar");if(!el)return;
 /* ---------- menú lateral (☰) ---------- */
 function menuItems(){
   const enc=isEnc();
-  if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["agenda","📅","Agenda"]]]];
+  if(enc)return [["General",[["portada","🏠","Inicio"],["inicio","📋","Mi día"],["caja","💵","Gastos y mi caja"],["cierre","🔒","Cierre de caja"],["jornales","👷","Jornales"],["bitacora","📒","Bitácora"],["stock","📦","Stock de materiales"],["agenda","📅","Agenda"]]]];
   const un=unidadActual();
   if(un==="suelo")return [["",[["ms","🚜","Presupuestos y trabajos"],["msd","👷","Dueños de máquinas"],["agenda","📅","Agenda"],["general","📊","Vista general"],["sec-admin","⚙️","Administración"]]]];
   if(un==="inmo"||un==="mkt")return [["",[["pronto","🕒","En preparación"],["agenda","📅","Agenda"],["general","📊","Vista general"],["sec-admin","⚙️","Administración"]]]];
@@ -2015,7 +2029,7 @@ function menuItems(){
 const SECC={
   inicio:["🏠","Inicio",[["portada","🏠","Pantalla de inicio","Lo del día y accesos rápidos"],["inicio","📊","Resumen del mes","Ingresos, gastos y obras"],["buscar","🔎","Buscar","Cualquier movimiento o dato"]]],
   dinero:["💵","Dinero",[["caja","💵","Cajas y movimientos","Saldos de cada caja"],["cierre","🔒","Apertura y cierre","Cierre diario de cajas"],["usd","💲","Dólares y cambios","Pases y cambios"],["tarjetas","💳","Tarjetas de crédito","Compras y cuotas"],["proyeccion","📈","Proyección de pagos","Qué hay que pagar cada semana"],["fede","👤","Caja de Federico","Ingresos y gastos personales"]],[["pagorem","📄","Pago con remito"]]],
-  obras:["🏗️","Obras",[["obras","🏗️","Obras","Legajos, contratos y adicionales"],["bitacora","📒","Bitácora","Días trabajados y fotos"],["jornales","👷","Jornales","Personas por obra y día"],["presupuestos","📐","Precios y presupuestos","Lista de precios y calculadora"]],[["newobra","🏗️","Obra"]]],
+  obras:["🏗️","Obras",[["obras","🏗️","Obras","Legajos, contratos y adicionales"],["bitacora","📒","Bitácora","Días trabajados y fotos"],["jornales","👷","Jornales","Personas por obra y día"],["presupuestos","📐","Precios y presupuestos","Lista de precios y calculadora"],["stock","📦","Stock de materiales","Por obra y galpón"]],[["newobra","🏗️","Obra"]]],
   personal:["👥","Personal",[["sueldos","🧾","Sueldos","Planillas y pagos"],["jornales","👷","Jornales","Personas por obra y día"],["encargados","🦺","Encargados","Accesos y obras a cargo"],["sueldos|emp","🪪","Empleados","Fichas, jornal y sueldo fijo"]],[["newenc","🦺","Encargado"]]],
   empresa:["🏢","Empresa",[["empresa","🏢","Gastos, herramientas y vehículos","Galpón y gastos generales"],["clientes","🤝","Clientes","Fichas y legajos"],["proveedores","🚚","Proveedores","Contactos y compras"]],[["newcli","🤝","Cliente"],["newprov","🚚","Proveedor"],["newherr","🛠️","Herramienta"]]],
   admin:["⚙️","Administración",[["@users","👥","Usuarios y contraseñas","Crear, cambiar y compartir accesos"],["@cfg","⚙️","Ajustes","Precios, jornal y saldos"],["@pack","📥","Importar datos","Archivos .json"],["@backup","💾","Copia de seguridad","Descargar todo"],["@link","🔗","Link de la app","Compartir por WhatsApp o copiar"]]]};
@@ -3150,3 +3164,69 @@ function hojaPresMS(p){const k=calcMS(p),logo=(document.querySelector("img.logo"
   ${k.iva?`<tr><td style="${td};text-align:right">IVA ${esc(String(p.iva).replace(".",","))}%</td><td style="${td};text-align:right">${fmt(k.iva)}</td></tr>`:""}
   <tr><td style="${td};text-align:right;font-weight:700">Total${k.iva?"":" (sin IVA)"}</td><td style="${td};text-align:right;font-weight:700;font-size:16px">${fmt(k.total)}</td></tr></table>
   <p style="color:#555;font-size:12px">Presupuesto válido por 15 días. Sinner Construcciones · info@sinnerconstrucciones.com</p></div>`}
+
+
+/* ---------- stock de materiales ---------- */
+const UNI_STK=["bolsas","unidades","barras","m³","m²","metros","kg","litros","rollos","paquetes","placas","latas"];
+const OBRA_GALPON="_empresa";
+function stockDe(obra){const M={};for(const e of (S.stock||[]).filter(x=>x.obra===obra)){const k=nrmTxt(e.material)+"|"+(e.unidad||"");const r=M[k]||(M[k]={material:e.material,unidad:e.unidad||"",cant:0,ult:"",movs:[]});r.cant+=+e.cant||0;r.movs.push(e);if((e.fecha||"")>r.ult)r.ult=e.fecha}
+  return Object.values(M).sort((a,b)=>a.material.localeCompare(b.material))}
+const nomObraStk=id=>id===OBRA_GALPON?"Galpón":obraNombre(id);
+function obrasStock(){const L=isEnc()?obrasCargo().filter(o=>!o.id.startsWith("_")):sortObras(S.obras).filter(o=>!o.id.startsWith("_")&&o.estado!=="Terminada");return isEnc()?L:[{id:OBRA_GALPON,nombre:"Galpón"},...L]}
+function stockResumenHtml(obra){if(S.sinStock)return "";const L=stockDe(obra).filter(x=>Math.abs(x.cant)>0.0001);
+  return `<section class="card"><div class="row between"><h3>📦 Stock de materiales (${L.length})</h3><button class="btn sm" data-go-stock="${esc(obra)}">Ver stock</button></div>
+  ${L.length?`<div class="note" style="margin:4px 0 0">${L.slice(0,6).map(x=>`${esc(x.material)}: <b>${fmtCant(x.cant)} ${esc(x.unidad)}</b>`).join(" · ")}${L.length>6?" …":""}</div>`:`<div class="note" style="margin:4px 0 0">Sin stock cargado.</div>`}</section>`}
+const fmtCant=n=>(Math.round(n*100)/100).toLocaleString("es-AR");
+document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-go-stock]");if(!b)return;S.filt.stobra=b.dataset.goStock;location.hash="stock"});
+function vStock(){
+  if(S.sinStock)return `<h2>📦 Stock de materiales</h2><div class="card">Falta activar el stock en la base de datos: corré el <b>SQL 13</b> en Supabase y volvé a abrir la app.</div>`;
+  const OB=obrasStock();if(!OB.length)return `<h2>📦 Stock de materiales</h2><div class="empty">No tenés obras asignadas.</div>`;
+  const ob=OB.some(o=>o.id===S.filt.stobra)?S.filt.stobra:OB[0].id;const L=stockDe(ob);const q=nrmTxt(S.filt.stq||"");
+  const V=q?L.filter(x=>nrmTxt(x.material).includes(q)):L;
+  const hist=(S.stock||[]).filter(e=>e.obra===ob).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.creado||0)-(a.creado||0)).slice(0,30);
+  const TIP={compra:"🛒 Compra",entrada:"➕ Entrada",uso:"➖ Usado",pase:"⇄ Pase",ajuste:"✏️ Ajuste"};
+  return `<div class="row between"><h2>📦 Stock de materiales</h2></div>
+  <div class="two"><label class="f">Obra<select id="st_ob">${OB.map(o=>`<option value="${esc(o.id)}" ${o.id===ob?"selected":""}>${esc(o.nombre)}</option>`).join("")}</select></label>
+  <label class="f">Buscar material<input id="st_q" value="${esc(S.filt.stq||"")}" placeholder="Ej: cemento"></label></div>
+  <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn pri sm" data-stk="uso">➖ Usado en obra</button>${isEnc()?"":`<button class="btn sm" data-stk="entrada">➕ Entrada</button><button class="btn sm" data-stk="pase">⇄ Pasar a otra obra</button>`}</div>
+  ${isEnc()?"":`<p class="note" style="margin:0">Las compras se suman solas cuando cargás un gasto de <b>Materiales</b> en Caja y tildás “Sumar al stock”.</p>`}
+  <div class="list">${V.map(x=>`<div class="item" style="cursor:default;grid-template-columns:minmax(0,1fr) auto;align-items:center"><span><span class="t">${esc(x.material)}</span><br><span class="s">Último movimiento: ${esc(fdate(x.ult))}</span></span>
+    <span style="text-align:right"><b style="font-size:17px;${x.cant<0?"color:var(--bad)":""}">${fmtCant(x.cant)}</b> <span class="note">${esc(x.unidad)}</span><br><button class="btn sm" data-stk="uso" data-mat="${esc(x.material)}" data-uni="${esc(x.unidad)}">➖ Usado</button></span></div>`).join("")||`<div class="empty">${q?"No hay materiales con ese nombre.":"Todavía no hay stock en "+esc(nomObraStk(ob))+"."}</div>`}</div>
+  ${hist.length?`<details class="card"><summary><b>Últimos movimientos</b></summary><div class="list" style="margin-top:6px">${hist.map(e=>`<div class="item" style="cursor:default;grid-template-columns:minmax(0,1fr) auto"><span><span class="t">${esc(TIP[e.tipo]||e.tipo)} · ${esc(e.material)}</span><br><span class="s">${esc(fdate(e.fecha))}${e.porNombre?" · "+esc(e.porNombre):""}${e.nota?" · "+esc(e.nota):""}</span></span><b class="${(+e.cant)<0?"neg":"pos"}">${(+e.cant)>0?"+":""}${fmtCant(+e.cant)} ${esc(e.unidad||"")}</b></div>`).join("")}</div></details>`:""}`}
+function bindStock(V){
+  const so=V.querySelector("#st_ob");if(so)so.onchange=()=>{S.filt.stobra=so.value;render()};
+  const sq=V.querySelector("#st_q");if(sq)sq.oninput=()=>{S.filt.stq=sq.value;const pos=sq.selectionStart;render();const n=$("#st_q");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}};
+  V.querySelectorAll("[data-stk]").forEach(b=>b.onclick=()=>openStockMov(b.dataset.stk,$("#st_ob").value,b.dataset.mat,b.dataset.uni));
+}
+function openStockMov(tipo,obra,mat,uni){
+  const mats=[...new Set((S.stock||[]).map(e=>e.material))].sort();const tit={uso:"➖ Material usado en obra",entrada:"➕ Entrada de material",pase:"⇄ Pasar material a otra obra"}[tipo];
+  const dest=obrasStock().filter(o=>o.id!==obra);
+  openSheet(`<form id="fst" style="display:flex;flex-direction:column;gap:12px">${sheetHead(tit+" · "+nomObraStk(obra))}
+    <label class="f">Material<input id="st_m" list="stMats" value="${esc(mat||"")}" required placeholder="Ej: cemento"><datalist id="stMats">${mats.map(x=>`<option value="${esc(x)}">`).join("")}</datalist></label>
+    <div class="two"><label class="f">Cantidad<input id="st_c" inputmode="decimal" required></label><label class="f">Unidad<select id="st_u">${UNI_STK.map(u=>`<option ${u===(uni||"bolsas")?"selected":""}>${u}</option>`).join("")}</select></label>
+    ${tipo==="pase"?`<label class="f">Pasar a<select id="st_d">${dest.map(o=>`<option value="${esc(o.id)}">${esc(o.nombre)}</option>`).join("")}</select></label>`:""}
+    <label class="f">Fecha<input type="date" id="st_f" value="${hoy()}"></label></div>
+    <label class="f">Nota (opcional)<input id="st_n" placeholder="${tipo==="uso"?"Ej: contrapiso planta baja":"Ej: compra en Sarmiento"}"></label>
+    <button class="btn pri" type="submit">Guardar</button></form>`,sh=>{
+    sh.querySelector("[data-close]").onclick=closeSheet;
+    $("#st_m").onchange=()=>{const x=(S.stock||[]).find(e=>nrmTxt(e.material)===nrmTxt($("#st_m").value));if(x&&x.unidad)$("#st_u").value=x.unidad};
+    $("#fst").onsubmit=async ev=>{ev.preventDefault();const c=num($("#st_c").value);if(!c)return toast("Falta la cantidad");
+      const base={material:$("#st_m").value.trim(),unidad:$("#st_u").value,fecha:$("#st_f").value,nota:$("#st_n").value.trim(),porNombre:(S.perfil&&S.perfil.nombre)||"",creado:Date.now()};
+      const disp=stockDe(obra).find(x=>nrmTxt(x.material)===nrmTxt(base.material)&&x.unidad===base.unidad);
+      if((tipo==="uso"||tipo==="pase")&&(!disp||disp.cant<c)&&!confirm(`En ${nomObraStk(obra)} figuran ${disp?fmtCant(disp.cant):0} ${base.unidad} de ${base.material}. ¿Guardar igual?`))return;
+      try{const id="st"+Date.now();
+        if(tipo==="pase"){const d=$("#st_d").value;await db.collection("stock").doc(id+"a").set({...base,obra,cant:-c,tipo:"pase",nota:("A "+nomObraStk(d)+". "+base.nota).trim()});await db.collection("stock").doc(id+"b").set({...base,obra:d,cant:c,tipo:"pase",nota:("Desde "+nomObraStk(obra)+". "+base.nota).trim()})}
+        else await db.collection("stock").doc(id).set({...base,obra,cant:tipo==="uso"?-c:c,tipo});
+        closeSheet();toast("Stock actualizado")}catch(e){toast(errMsg(e))}};
+  })}
+function stockFormInit(){const W=$("#wStock");if(!W)return;
+  const upd=()=>{const t=(document.querySelector("#segTipo [aria-pressed=true]")||{}).dataset;const tipo=t&&(t.t||t.v||t.tipo);const cat=$("#m_cat")?$("#m_cat").value:"";
+    W.style.display=(cat==="Materiales"&&(!tipo||tipo==="egreso"))?"flex":"none"};
+  const row=()=>{const d=document.createElement("div");d.dataset.srow=1;d.className="row";d.style.cssText="gap:6px;flex-wrap:wrap";
+    d.innerHTML=`<input data-k="mat" list="stMatsMov" placeholder="Material (ej: cemento)" style="flex:2;min-width:140px"><input data-k="cant" inputmode="decimal" placeholder="Cant." style="width:80px"><select data-k="uni" style="width:110px">${UNI_STK.map(u=>`<option>${u}</option>`).join("")}</select>`;$("#m_stkRows").appendChild(d)};
+  if(!$("#stMatsMov")){const dl=document.createElement("datalist");dl.id="stMatsMov";dl.innerHTML=[...new Set((S.stock||[]).map(e=>e.material))].map(x=>`<option value="${esc(x)}">`).join("");document.body.appendChild(dl)}
+  $("#m_stk").onchange=()=>{const on=$("#m_stk").checked;$("#m_stkRows").style.display=on?"flex":"none";$("#m_stkAdd").style.display=on?"":"none";if(on&&!$("#m_stkRows").children.length)row()};
+  $("#m_stkAdd").onclick=row;
+  if($("#m_cat"))$("#m_cat").addEventListener("change",upd);
+  const sg=$("#segTipo");if(sg)sg.addEventListener("click",()=>setTimeout(upd,0));
+  upd()}
